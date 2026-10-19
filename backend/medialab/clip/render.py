@@ -14,7 +14,7 @@ from ..errors import MediaLabError
 from ..logging_setup import get_logger
 from ..media import ffmpeg
 from ..subtitles import formats
-from . import captions, reframe, tracking
+from . import captions, chat, reframe, tracking
 
 log = get_logger("clip")
 Progress = Callable[[float, str], None]
@@ -26,7 +26,7 @@ def safe_name(title: str, fallback: str) -> str:
 
 
 def render(src: Path, video: dict, clip: dict, words: list[dict], dst: Path, cancel: threading.Event,
-           progress: Progress, use_gpu: bool = True) -> dict:
+           progress: Progress, use_gpu: bool = True, messages: list[dict] | None = None) -> dict:
     """Rend ``clip`` ({start, end, layout, captions…}) dans ``dst`` (MP4 1080×1920)."""
     start, end = float(clip["start"]), float(clip["end"])
     dur = end - start
@@ -49,9 +49,12 @@ def render(src: Path, video: dict, clip: dict, words: list[dict], dst: Path, can
             track_file = True
         style_name = clip.get("captions") or "tiktok"
         cues = captions.chunks(words, start, end) if style_name != "none" else []
-        _, seam = reframe.filtergraph(layout, sw, sh, False, track_file)
-        if layout.mode == "discord":
-            # en bas de la cam : les messages Discord restent lisibles
+        _, seam = reframe.filtergraph(layout, sw, sh, False, track_file, fps, dur)
+        if layout.mode == "chat":
+            (tmp / "chat.ass").write_text(chat.ass(messages or [], start, end, reframe.OUT_W,
+                                                   reframe.OUT_H - reframe._cam_crop(layout.cam or (0.0, 0.0, 0.25, 0.25), sw, sh)[0]),
+                                          "utf-8")
+            # en bas de la cam : les messages du chat restent lisibles
             style = captions.style_for(style_name, "top", max(4.0, seam - 13))
         elif layout.mode == "stream":
             style = captions.style_for(style_name, "top", seam)
@@ -60,7 +63,7 @@ def render(src: Path, video: dict, clip: dict, words: list[dict], dst: Path, can
         has_subs = bool(cues and style)
         if has_subs:
             formats.write(tmp / "subs.ass", formats.to_ass(cues, style, reframe.OUT_W, reframe.OUT_H, clip.get("lang") or ""))
-        graph, _ = reframe.filtergraph(layout, sw, sh, has_subs, track_file)
+        graph, _ = reframe.filtergraph(layout, sw, sh, has_subs, track_file, fps, dur)
 
         last_err: MediaLabError | None = None
         for gpu in ([True, False] if use_gpu else [False]):

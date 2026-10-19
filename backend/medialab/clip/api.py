@@ -44,7 +44,6 @@ class ClipPatchBody(BaseModel):
 class LayoutBody(BaseModel):
     mode: str
     cam: list[float] | None = None
-    zone: list[float] | None = None
     apply_all: bool = True
 
 
@@ -106,7 +105,7 @@ def register(app: FastAPI, S) -> None:
 
     @app.get("/api/clip/catalog")
     async def clip_catalog():
-        return {"captions": list(CAPTION_STYLES), "layouts": ["auto", "stream", "face", "fit"],
+        return {"captions": list(CAPTION_STYLES), "layouts": ["auto", "stream", "chat", "face", "fit"],
                 "output_dir": str(Path.home() / "Videos" / "se7en Clip")}
 
     @app.get("/api/clip/projects")
@@ -184,6 +183,22 @@ def register(app: FastAPI, S) -> None:
         P.save(project)
         return project
 
+    @app.get("/api/clip/login")
+    async def clip_login_status():
+        from . import login
+        return await run_in_threadpool(login.status)
+
+    @app.post("/api/clip/login/{site}")
+    async def clip_login(site: str):
+        from . import login
+        return await run_in_threadpool(login.open_window, site, S.settings)
+
+    @app.delete("/api/clip/login/{site}")
+    async def clip_logout(site: str):
+        from . import login
+        await run_in_threadpool(login.logout, site)
+        return {"ok": True}
+
     @app.get("/api/clip/projects/{pid}/frame")
     async def clip_frame(pid: str, t: float | None = None):
         """Une image de la vidéo source (pour régler le cadrage)."""
@@ -203,10 +218,9 @@ def register(app: FastAPI, S) -> None:
     @app.put("/api/clip/projects/{pid}/layout")
     async def clip_layout(pid: str, body: LayoutBody):
         from .reframe import Layout, clamp_box
-        if body.mode not in ("stream", "discord", "face", "fit"):
+        if body.mode not in ("stream", "chat", "face", "fit"):
             raise MediaLabError("invalid", "Cadrage inconnu.")
-        layout = Layout(body.mode, clamp_box(body.cam) if body.cam else None, 1.0,
-                        clamp_box(body.zone) if body.zone else None).to_dict()
+        layout = Layout(body.mode, clamp_box(body.cam) if body.cam else None, 1.0).to_dict()
         project = P.load(pid)
         project["layout"] = layout
         if body.apply_all:

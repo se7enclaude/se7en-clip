@@ -10,13 +10,12 @@ import { duration as fmtDuration } from "../lib/format";
 import { useApp } from "../store/app";
 import "../styles/clip.css";
 
-type Layout = "auto" | "stream" | "discord" | "face" | "fit";
+type Layout = "auto" | "stream" | "chat" | "face" | "fit";
 type Captions = "tiktok" | "hormozi" | "neon" | "clean" | "none";
 
 interface ClipLayout {
-  mode: "stream" | "discord" | "face" | "fit";
+  mode: "stream" | "chat" | "face" | "fit";
   cam: number[] | null;
-  zone?: number[] | null;
 }
 
 interface Clip {
@@ -81,9 +80,42 @@ const STEPS: { id: string; label: string }[] = [
   { id: "layout", label: "Cadrage" },
   { id: "render", label: "Rendu" },
 ];
-const LAYOUT_LABEL: Record<string, string> = { auto: "Auto", stream: "Cam + jeu", discord: "Cam + Discord", face: "Visage suivi", fit: "Plein cadre" };
+const LAYOUT_LABEL: Record<string, string> = { auto: "Auto", stream: "Cam + jeu", chat: "Cam + chat", face: "Visage suivi", fit: "Plein cadre" };
 const LOGIN_ERRORS = ["members_only", "login_required", "private", "age_restricted"];
 const isPatreon = (s: string) => /patreon\.com/i.test(s);
+
+/** Connexion Patreon : fenêtre du site dans l'appli, la session est gardée chiffrée sur le PC. */
+function usePatreonLogin() {
+  const toast = useApp((s) => s.toast);
+  const [connected, setConnected] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const refresh = useCallback(() => {
+    api.get<{ patreon: boolean }>("/api/clip/login").then((r) => setConnected(r.patreon)).catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    refresh();
+    return events.on((ev) => {
+      if (ev.type !== "clip_login") return;
+      setOpening(false);
+      refresh();
+      if (ev.data?.ok) toast({ kind: "success", title: "Connecté à Patreon", body: "Les vidéos réservées aux membres sont maintenant accessibles." });
+    });
+  }, [refresh, toast]);
+  const login = async () => {
+    setOpening(true);
+    try {
+      await api.post("/api/clip/login/patreon");
+    } catch (e: any) {
+      setOpening(false);
+      toast({ kind: "error", title: e.message, body: e.hint });
+    }
+  };
+  const logout = async () => {
+    await api.del("/api/clip/login/patreon");
+    refresh();
+  };
+  return { connected, opening, login, logout };
+}
 const CAPTION_LABEL: Record<Captions, string> = { tiktok: "TikTok", hormozi: "Hormozi", neon: "Néon", clean: "Sobre", none: "Aucun" };
 
 const isUrl = (s: string) => /^https?:\/\//i.test(s.trim());
@@ -172,6 +204,7 @@ function statusText(s: string) {
 // ------------------------------------------------------------------ nouveau projet
 function NewProject({ onCreated, onError }: { onCreated: (p: Project) => void; onError: (e: any) => void }) {
   const [source, setSource] = useState("");
+  const patreon = usePatreonLogin();
   const [count, setCount] = useState("0");
   const [length, setLength] = useState("medium");
   const [layout, setLayout] = useState<Layout>("auto");
@@ -222,10 +255,19 @@ function NewProject({ onCreated, onError }: { onCreated: (p: Project) => void; o
         </Button>
       </div>
       {isPatreon(source) && (
-        <div className="clip-hint">
+        <div className={clsx("clip-hint", patreon.connected && "ok")}>
           <KeyRound size={14} />
-          <span>Vidéo Patreon réservée aux membres ? se7en Clip doit utiliser ta connexion : choisis ton navigateur (connecté à Patreon) dans Réglages › Confidentialité › Cookies. Firefox fonctionne le mieux.</span>
-          <Button size="sm" variant="ghost" onClick={() => useApp.getState().goSettings("privacy")}>Ouvrir</Button>
+          {patreon.connected ? (
+            <>
+              <span>Connecté à Patreon : les vidéos réservées aux membres sont accessibles.</span>
+              <Button size="sm" variant="ghost" onClick={patreon.logout}>Se déconnecter</Button>
+            </>
+          ) : (
+            <>
+              <span>Vidéo réservée aux membres ? Connecte-toi une fois à Patreon dans se7en Clip (ton mot de passe reste chez Patreon, la session est gardée chiffrée sur ce PC).</span>
+              <Button size="sm" variant="primary" loading={patreon.opening} onClick={patreon.login}>Se connecter à Patreon</Button>
+            </>
+          )}
         </div>
       )}
       <div className="clip-options">
@@ -241,7 +283,7 @@ function NewProject({ onCreated, onError }: { onCreated: (p: Project) => void; o
           <Segmented size="sm" value={length} onChange={setLength} options={[{ value: "short", label: "15–35 s" }, { value: "medium", label: "20–60 s" }, { value: "long", label: "45–90 s" }]} />
         </Opt>
         <Opt label="Cadrage">
-          <Segmented size="sm" value={layout} onChange={setLayout} options={(["auto", "stream", "discord", "face", "fit"] as Layout[]).map((v) => ({ value: v, label: LAYOUT_LABEL[v] }))} />
+          <Segmented size="sm" value={layout} onChange={setLayout} options={(["auto", "stream", "chat", "face", "fit"] as Layout[]).map((v) => ({ value: v, label: LAYOUT_LABEL[v] }))} />
         </Opt>
         <Opt label="Sous-titres">
           <Segmented size="sm" value={captions} onChange={setCaptions} options={(Object.keys(CAPTION_LABEL) as Captions[]).map((v) => ({ value: v, label: CAPTION_LABEL[v] }))} />
@@ -265,6 +307,7 @@ function ProjectView({ id, live, onBack }: { id: string; live?: Live; onBack: ()
   const toast = useApp((s) => s.toast);
   const [p, setP] = useState<Project | null>(null);
   const [editing, setEditing] = useState(false);
+  const patreon = usePatreonLogin();
   const load = useCallback(() => api.get<Project>(`/api/clip/projects/${id}`).then(setP).catch((e) => toast({ kind: "error", title: e.message })), [id, toast]);
 
   useEffect(() => {
@@ -347,10 +390,15 @@ function ProjectView({ id, live, onBack }: { id: string; live?: Live; onBack: ()
 
       {p.status === "error" && p.error && (
         <ErrorAlert
-          error={{ code: "clip_failed", message: p.error.message, hint: LOGIN_ERRORS.includes(p.error.code ?? "") ? "Connecte-toi au site dans ton navigateur, puis choisis ce navigateur dans Réglages › Confidentialité › Cookies (ou importe un fichier cookies.txt)." : p.error.hint }}
+          error={{ code: "clip_failed", message: p.error.message, hint: LOGIN_ERRORS.includes(p.error.code ?? "") ? (isPatreon(p.source.url ?? "") ? "Ce post est réservé aux membres : connecte-toi à Patreon avec le bouton ci-dessous (un compte qui a accès à ce post), puis réessaie." : "Connecte-toi au site dans ton navigateur, puis choisis ce navigateur dans Réglages › Confidentialité › Cookies (ou importe un fichier cookies.txt).") : p.error.hint }}
           actions={
             <>
-              {LOGIN_ERRORS.includes(p.error.code ?? "") && <Button icon={<KeyRound size={14} />} onClick={() => useApp.getState().goSettings("privacy")}>Cookies</Button>}
+              {LOGIN_ERRORS.includes(p.error.code ?? "") &&
+                (isPatreon(p.source.url ?? "") ? (
+                  <Button icon={<KeyRound size={14} />} loading={patreon.opening} onClick={patreon.login}>{patreon.connected ? "Reconnecter Patreon" : "Se connecter à Patreon"}</Button>
+                ) : (
+                  <Button icon={<KeyRound size={14} />} onClick={() => useApp.getState().goSettings("privacy")}>Cookies</Button>
+                ))}
               <Button icon={<RefreshCw size={14} />} onClick={() => act(() => api.post(`/api/clip/projects/${id}/analyze`, {}))}>Réessayer</Button>
             </>
           }
@@ -371,7 +419,7 @@ function ProjectView({ id, live, onBack }: { id: string; live?: Live; onBack: ()
         open={editing}
         projectId={id}
         duration={p.video?.duration ?? 0}
-        initial={{ mode: (lay?.mode ?? "fit") as any, cam: (lay?.cam as Box) ?? null, zone: (lay?.zone as Box) ?? null, at: (p.clips[0]?.start ?? 0) + 2 }}
+        initial={{ mode: (lay?.mode ?? "fit") as any, cam: (lay?.cam as Box) ?? null, at: (p.clips[0]?.start ?? 0) + 2 }}
         onClose={() => setEditing(false)}
         onSave={async (v) => {
           await act(async () => {
@@ -482,14 +530,13 @@ function ClipCard({ project, clip, rank, onChange }: { project: Project; clip: C
         <div className="row" style={{ gap: 8, marginTop: 10 }}>
           <Select
             value={clip.layout.mode}
-            options={(["stream", "discord", "face", "fit"] as const).map((v) => ({ value: v, label: LAYOUT_LABEL[v] }))}
+            options={(["stream", "chat", "face", "fit"] as const).map((v) => ({ value: v, label: LAYOUT_LABEL[v] }))}
             onChange={(v) =>
               patch({
                 layout: {
                   ...clip.layout,
                   mode: v,
-                  cam: v === "stream" || v === "discord" ? clip.layout.cam ?? project.layout?.cam ?? [0, 0, 0.3, 0.3] : clip.layout.cam,
-                  zone: v === "discord" ? clip.layout.zone ?? project.layout?.zone ?? [0.55, 0.1, 0.43, 0.8] : clip.layout.zone,
+                  cam: v === "stream" || v === "chat" ? clip.layout.cam ?? project.layout?.cam ?? [0, 0, 0.3, 0.3] : clip.layout.cam,
                 },
               })
             }

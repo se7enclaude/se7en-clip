@@ -1,7 +1,7 @@
 """Tests de la logique de se7en Clip (sans GPU, sans modèle, sans vidéo)."""
 import numpy as np
 
-from medialab.clip import captions, moments as M, reframe, scoring, tracking
+from medialab.clip import captions, chat, moments as M, reframe, scoring, tracking
 
 
 def _words(text: str, start: float = 0.0, step: float = 0.3) -> list[dict]:
@@ -127,34 +127,7 @@ def test_filtergraphs():
     assert "boxblur" in g and g.endswith("[v]")
 
 
-def test_chat_replay_parsing(tmp_path):
-    from medialab.clip import pipeline
-    yt = tmp_path / "chat.live_chat.json"
-    yt.write_text('{"replayChatItemAction": {"videoOffsetTimeMsec": "12500", "actions": []}}\n'
-                  '{"replayChatItemAction": {"videoOffsetTimeMsec": "13000"}}\n', "utf-8")
-    tw = tmp_path / "chat.rechat.json"
-    tw.write_text('{"comments": [{"content_offset_seconds": 40.5}, {"contentOffsetSeconds": 41}]}', "utf-8")
-    assert pipeline._parse_chat(yt) == [12.5, 13.0]
-    assert pipeline._parse_chat(tw) == [40.5, 41.0]
 
-
-def test_discord_zone_found_on_stable_discord_colors():
-    rng = np.random.default_rng(3)
-    masks = []
-    for _ in range(10):
-        img = rng.integers(0, 255, (360, 640, 3), dtype=np.uint8)  # jeu : couleurs qui changent
-        img[40:330, 380:630] = (49, 51, 56)  # fenêtre Discord (fond des messages)
-        img[40:330, 380:440] = (43, 45, 49)  # sa barre latérale
-        masks.append(reframe.discord_mask(img))
-    x, y, w, h = reframe.discord_zone(masks)
-    assert abs(x - 380 / 640) < 0.03 and abs(y - 40 / 360) < 0.05
-    assert abs(w - 250 / 640) < 0.04 and abs(h - 290 / 360) < 0.06
-
-
-def test_no_discord_zone_on_plain_game():
-    rng = np.random.default_rng(4)
-    masks = [reframe.discord_mask(rng.integers(0, 255, (360, 640, 3), dtype=np.uint8)) for _ in range(10)]
-    assert reframe.discord_zone(masks) is None
 
 
 def test_auto_count_follows_duration():
@@ -164,14 +137,43 @@ def test_auto_count_follows_duration():
     assert auto_count(4 * 3600) == 30
 
 
-def test_discord_filtergraph():
-    lay = reframe.Layout("discord", (0.0, 0.7, 0.25, 0.3), 1.0, (0.6, 0.05, 0.38, 0.9))
-    g, seam = reframe.filtergraph(lay, 1920, 1080, True, False)
-    assert g.count("crop=") == 4 and "vstack" in g and "overlay" in g and g.endswith("[v]")
-    assert 30 < seam < 50
-    assert reframe.Layout.from_dict(lay.to_dict()) == lay
-
 
 def test_cam_box_snaps_to_corner():
     x, y, w, h = reframe.cam_box(0.12, 0.85, 0.06, 0.11, 16 / 9)
     assert x == 0.0 and abs(y + h - 1.0) < 1e-6
+
+
+def test_twitch_video_id():
+    assert chat.twitch_video_id("https://www.twitch.tv/videos/2905130118") == "2905130118"
+    assert chat.twitch_video_id("https://www.twitch.tv/zerator/video/123?t=1h") == "123"
+    assert chat.twitch_video_id("https://www.youtube.com/watch?v=x") is None
+
+
+def test_youtube_live_chat_parsing(tmp_path):
+    f = tmp_path / "chat.live_chat.json"
+    f.write_text('{"replayChatItemAction": {"videoOffsetTimeMsec": "12500", "actions": [{"addChatItemAction": '
+                 '{"item": {"liveChatTextMessageRenderer": {"message": {"runs": [{"text": "trop fort "}, '
+                 '{"emoji": {"shortcuts": [":fire:"]}}]}, "authorName": {"simpleText": "@Bob"}}}}}]}}\n', "utf-8")
+    msgs = chat._youtube_messages(f)
+    assert msgs == [{"t": 12.5, "user": "Bob", "color": chat.color_for("Bob"), "text": "trop fort :fire:"}]
+
+
+def test_chat_ass_scrolls_and_escapes():
+    msgs = [{"t": 95.0, "user": "Avant", "color": "#FF0000", "text": "déjà là"},
+            {"t": 101.0, "user": "Alice", "color": "#00FF00", "text": "mdr {lol}"},
+            {"t": 103.5, "user": "Bob", "color": "#0000FF", "text": "x" * 200}]
+    a = chat.ass(msgs, 100.0, 110.0, 1080, 1180)
+    events = [ln for ln in a.splitlines() if ln.startswith("Dialogue") and ",Chat," in ln]
+    assert len(events) == 3  # état initial + 2 nouveaux messages
+    assert events[0].startswith("Dialogue: 0,0:00:00.00,0:00:01.00,Chat")
+    assert "{" not in events[1].split("Alice", 1)[1].replace("{\\b0\\c&HF1EFEF&}", "")
+    assert "&H00FF00&" in events[1] and "&HFF0000&" in events[2]  # couleurs en BGR
+    assert "…" in events[2]  # message trop long raccourci
+    assert "CHAT DU STREAM" in a
+
+
+def test_chat_filtergraph():
+    g, seam = reframe.filtergraph(reframe.Layout("chat", (0.0, 0.7, 0.25, 0.3)), 1920, 1080, True, False, 30, 42.5)
+    assert "color=c=0x18181B" in g and "d=42.500" in g and "ass=chat.ass" in g and g.endswith("ass=subs.ass[v]")
+    assert 30 < seam < 50
+    assert reframe.Layout.from_dict({"mode": "discord", "cam": [0, 0, 0.2, 0.2]}).mode == "stream"

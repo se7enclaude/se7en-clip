@@ -19,6 +19,7 @@ from ..subtitles import project as subs_project
 from ..subtitles import transcribe as T
 from . import moments as M
 from . import project as P
+from . import chat as chat_mod
 from . import reframe, render, scoring
 
 log = get_logger("clip")
@@ -65,76 +66,37 @@ def _download(project: dict, settings, jctx, st: Stepper) -> Path:
         st.report((pct or 0) / 100, "Téléchargement de la vidéo")
 
     provider = registry.get("ytdlp")
-    dctx = DownloadContext(job_id=jctx.job["id"], settings=settings,
-                           cancel=jctx.cancel, progress=on_progress, temp_dir=jctx.temp_dir)
-    res = provider.download(url, {"mode": "av", "quality": "1080", "container": "mp4", "output_dir": str(out),
-                                  "folder_structure": "", "embed_thumbnail": False, "write_subtitles": False},
-                            dctx)
+    opts = {"mode": "av", "quality": "1080", "container": "mp4", "output_dir": str(out), "folder_structure": "",
+            "embed_thumbnail": False, "write_subtitles": False}
+
+    def attempt(s):
+        dctx = DownloadContext(job_id=jctx.job["id"], settings=s, cancel=jctx.cancel, progress=on_progress,
+                               temp_dir=jctx.temp_dir)
+        return provider.download(url, opts, dctx)
+
+    try:
+        res = attempt(settings)
+    except MediaLabError as e:
+        text = f"{e.message} {e.detail or ''}".lower()
+        if settings.privacy.cookies_mode != "browser" or not ("cookie" in text and ("copy" in text or "decrypt" in text)):
+            raise
+        # Chrome / Edge / Brave chiffrent ou verrouillent leurs cookies : on réessaie sans eux
+        log.warning("Browser cookies unreadable (%s); retrying without cookies", settings.privacy.cookies_browser)
+        no_cookies = settings.model_copy(update={"privacy": settings.privacy.model_copy(update={"cookies_mode": "none"})})
+        try:
+            res = attempt(no_cookies)
+        except MediaLabError as e2:
+            if e2.code in ("members_only", "login_required", "private", "age_restricted"):
+                raise MediaLabError(e2.code, f"Les cookies de {settings.privacy.cookies_browser} ne sont pas lisibles "
+                                    "et cette vidéo demande d'être connecté.",
+                                    "Utilisez le bouton « Se connecter » de se7en Clip.") from e2
+            raise
     project = P.load(project["id"])
     project["source"]["path"] = res.file_path
     if res.title:
         project["name"] = res.title[:120]
     P.save(project)
     return Path(res.file_path)
-
-
-def _fetch_chat(url: str, cache: Path, cancel: threading.Event) -> list[float]:
-    """Temps (s) des messages du chat d'une rediffusion Twitch / YouTube, si yt-dlp sait les récupérer."""
-    f = cache / "chat_times.json"
-    if f.exists():
-        return json.loads(f.read_text("utf-8"))
-    times: list[float] = []
-    if not re.search(r"twitch\.tv|youtube\.com|youtu\.be", url, re.I):
-        f.write_text("[]", "utf-8")
-        return times
-    try:
-        import yt_dlp
-        opts = {"skip_download": True, "writesubtitles": True, "subtitleslangs": ["live_chat", "rechat"],
-                "outtmpl": str(cache / "chat.%(ext)s"), "quiet": True, "no_warnings": True, "noprogress": True}
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([url])
-        for p in cache.glob("chat*.json"):
-            times += _parse_chat(p)
-    except Exception as e:  # le chat est un bonus : jamais bloquant
-        log.info("Chat replay unavailable for %s: %s", url, e)
-    times.sort()
-    f.write_text(json.dumps(times), "utf-8")
-    return times
-
-
-def _parse_chat(p: Path) -> list[float]:
-    """Accepte le format YouTube (une ligne JSON par action) et Twitch (JSON avec des commentaires)."""
-    out: list[float] = []
-
-    def walk(o) -> None:
-        if isinstance(o, dict):
-            for k, v in o.items():
-                if k == "videoOffsetTimeMsec":
-                    try:
-                        out.append(int(v) / 1000)
-                    except (TypeError, ValueError):
-                        pass
-                elif k in ("content_offset_seconds", "contentOffsetSeconds"):
-                    try:
-                        out.append(float(v))
-                    except (TypeError, ValueError):
-                        pass
-                else:
-                    walk(v)
-        elif isinstance(o, list):
-            for v in o:
-                walk(v)
-
-    text = p.read_text("utf-8", errors="replace")
-    try:
-        walk(json.loads(text))
-    except json.JSONDecodeError:
-        for line in text.splitlines():
-            try:
-                walk(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-    return out
 
 
 # ------------------------------------------------------------------ analyse
@@ -201,7 +163,8 @@ def analyze(pid: str, settings, jctx, progress: Progress, render_clips: bool = T
 
     # 3. signaux et candidats
     st.step("moments", "Recherche des moments forts")
-    chat = _fetch_chat(project["source"]["url"], cache, cancel) if project["source"].get("url") else []
+    messages = chat_mod.fetch(project["source"].get("url"), float(video["duration"] or 0), cache, cancel)
+    chat = [m["t"] for m in messages]
     loud = M.loudness_per_second(T.read_wav(wav))
     sig = M.signals(float(video["duration"] or len(loud)), loud, words, chat)
     sents = M.sentences(words)
@@ -235,6 +198,9 @@ def analyze(pid: str, settings, jctx, progress: Progress, render_clips: bool = T
         layout_file.write_text(json.dumps(layout.to_dict()), "utf-8")
     if forced != "auto":
         layout = forced_layout(forced, layout)
+    if layout.mode == "chat" and not messages:
+        layout = reframe.Layout("stream", layout.cam, layout.confidence)
+        notes.append("Pas de chat récupérable pour cette vidéo (Twitch et YouTube seulement) : cadrage « Cam + jeu ».")
     clips = []
     for m in best:
         clips.append({"id": uuid.uuid4().hex[:10], **m, "layout": layout.to_dict(),
@@ -257,14 +223,11 @@ def analyze(pid: str, settings, jctx, progress: Progress, render_clips: bool = T
 
 
 def forced_layout(mode: str, detected: reframe.Layout) -> reframe.Layout:
-    """Mise en page choisie par l'utilisateur, en gardant ce que la détection a trouvé (cam, zone Discord)."""
-    cam = detected.cam if mode in ("stream", "discord") else None
-    zone = detected.zone if mode == "discord" else None
-    if mode in ("stream", "discord") and not cam:
+    """Mise en page choisie par l'utilisateur, en gardant ce que la détection a trouvé (la cam)."""
+    cam = detected.cam if mode in ("stream", "chat") else None
+    if mode in ("stream", "chat") and not cam:
         cam = (0.0, 0.0, 0.3, 0.3)  # à ajuster dans « Régler le cadrage »
-    if mode == "discord" and not zone:
-        zone = (0.55, 0.1, 0.43, 0.8)
-    return reframe.Layout(mode, cam, 1.0, zone)
+    return reframe.Layout(mode, cam, 1.0)
 
 
 def render_one(pid: str, cid: str, settings, cancel: threading.Event, progress: Callable[[float, str], None],
@@ -285,8 +248,12 @@ def render_one(pid: str, cid: str, settings, cancel: threading.Event, progress: 
         Path(clip["file"]).unlink(missing_ok=True)
         Path(clip["file"]).with_suffix(".jpg").unlink(missing_ok=True)
         Path(clip["file"]).with_suffix(".txt").unlink(missing_ok=True)
+    messages = None
+    if (clip.get("layout") or {}).get("mode") == "chat":
+        f = P.cache_dir(pid) / "chat.json"
+        messages = json.loads(f.read_text("utf-8")) if f.exists() else []
     res = render.render(src, project["video"], clip, words, dst, cancel, progress,
-                        use_gpu=bool(getattr(settings.tools, "use_gpu_encoder", True)))
+                        use_gpu=bool(getattr(settings.tools, "use_gpu_encoder", True)), messages=messages)
     render.write_caption_file(dst, clip)
     project = P.load(pid)
     for c in project["clips"]:

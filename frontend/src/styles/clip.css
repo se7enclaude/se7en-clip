@@ -360,3 +360,7 @@
 .le-handle.tr { right: -7px; top: -7px; cursor: nesw-resize; }
 .le-handle.bl { left: -7px; bottom: -7px; cursor: nesw-resize; }
 .le-handle.br { right: -7px; bottom: -7px; cursor: nwse-resize; }
+
+.clip-hint.ok {
+  background: var(--success-soft);
+}
