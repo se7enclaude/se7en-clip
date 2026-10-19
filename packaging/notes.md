@@ -1,12 +1,8 @@
-## se7en Clip 0.1.0 — première version
+## se7en Clip 0.2.0
 
-Une longue vidéo ou une rediff de stream → les meilleurs moments en clips verticaux, prêts pour TikTok / Shorts / Reels. Tout tourne sur votre PC (aucun site payant).
+- **Nombre de clips automatique** : par défaut, se7en Clip fait environ un clip toutes les 4 minutes de vidéo (1 h → 15 clips, de 3 à 30). Vous pouvez toujours choisir 5, 10, 15 ou 20.
+- **Nouveau cadrage « Cam + Discord »** : la cam en haut, la fenêtre Discord en dessous en entier. La fenêtre Discord est trouvée automatiquement.
+- **Régler le cadrage** : un bouton « Cadrage » dans chaque projet pour placer vous-même la cam et la fenêtre Discord à la souris, puis refaire tous les clips d'un clic.
+- **Liens Patreon** : collez un lien de post Patreon. Pour une vidéo réservée aux membres, choisissez votre navigateur connecté à Patreon dans Réglages › Confidentialité › Cookies (Firefox fonctionne le mieux).
 
-- **Trouve les moments tout seul** : transcription mot par mot, pics de son, réactions, chat de la rediff (Twitch / YouTube), puis une IA locale note chaque moment et écrit titre, description et hashtags.
-- **Cadrage 9:16 automatique** : cam en haut + jeu en bas pour un stream, visage suivi pour un podcast, ou plein cadre sur fond flouté.
-- **Sous-titres mot par mot** (styles TikTok, Hormozi, Néon, Sobre).
-- **Retouche facile** : début / fin, cadrage, sous-titres, nouveau rendu d'un clic.
-
-Au premier projet, se7en Clip télécharge une fois le modèle de transcription (~0,9 Go) et l'IA de texte (~5 Go). Carte graphique conseillée.
-
-Installez ou mettez à jour depuis **Seventh OS**, ou téléchargez `se7en-Clip-Setup-0.1.0.exe` ci-dessous. Windows peut afficher SmartScreen (exécutable non signé) : « Informations complémentaires » → « Exécuter quand même ».
+Installez ou mettez à jour depuis **Seventh OS** ; l'appli propose aussi la mise à jour toute seule.

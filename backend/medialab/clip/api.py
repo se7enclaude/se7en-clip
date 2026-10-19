@@ -21,7 +21,7 @@ log = get_logger("clip")
 
 class NewProjectBody(BaseModel):
     source: str
-    count: int = 10
+    count: int = 0  # 0 = automatique (selon la durée)
     min_len: int = 20
     max_len: int = 75
     layout: str = "auto"
@@ -39,6 +39,13 @@ class ClipPatchBody(BaseModel):
     hashtags: list[str] | None = None
     layout: dict | None = None
     captions: str | None = None
+
+
+class LayoutBody(BaseModel):
+    mode: str
+    cam: list[float] | None = None
+    zone: list[float] | None = None
+    apply_all: bool = True
 
 
 class OptionsBody(BaseModel):
@@ -75,7 +82,8 @@ def make_worker(settings):
             bus.publish("clip_project", {"project": pid})
             raise
         except MediaLabError as e:
-            P.patch(pid, {"status": "error", "error": {"message": e.message, "hint": e.hint}, "step": None})
+            P.patch(pid, {"status": "error", "error": {"code": e.code, "message": e.message, "hint": e.hint},
+                          "step": None})
             bus.publish("clip_project", {"project": pid})
             raise
         except Exception as e:
@@ -175,6 +183,46 @@ def register(app: FastAPI, S) -> None:
         project["clips"] = keep
         P.save(project)
         return project
+
+    @app.get("/api/clip/projects/{pid}/frame")
+    async def clip_frame(pid: str, t: float | None = None):
+        """Une image de la vidéo source (pour régler le cadrage)."""
+        from fastapi.responses import FileResponse
+        from ..media import ffmpeg
+        project = P.load(pid)
+        src = Path(project["source"].get("path") or "")
+        if not src.is_file():
+            raise MediaLabError("source_missing", "La vidéo source de ce projet n'existe plus.")
+        at = t if t is not None else (project["clips"][0]["start"] + 2 if project["clips"] else
+                                      P.video_duration(project) * 0.3)
+        out = P.cache_dir(pid) / f"frame-{int(at * 10)}.jpg"
+        if not out.exists():
+            await run_in_threadpool(ffmpeg.extract_frame, src, at, out)
+        return FileResponse(out, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+    @app.put("/api/clip/projects/{pid}/layout")
+    async def clip_layout(pid: str, body: LayoutBody):
+        from .reframe import Layout, clamp_box
+        if body.mode not in ("stream", "discord", "face", "fit"):
+            raise MediaLabError("invalid", "Cadrage inconnu.")
+        layout = Layout(body.mode, clamp_box(body.cam) if body.cam else None, 1.0,
+                        clamp_box(body.zone) if body.zone else None).to_dict()
+        project = P.load(pid)
+        project["layout"] = layout
+        if body.apply_all:
+            for c in project["clips"]:
+                c["layout"] = dict(layout)
+                c["stale"] = True
+        P.save(project)
+        return project
+
+    @app.post("/api/clip/projects/{pid}/render-all")
+    async def clip_render_all(pid: str):
+        project = P.load(pid)
+        jobs = [S.jobs.add("clip", project["source"].get("path") or "", {"op": "render", "project": pid, "clip": c["id"]},
+                           title=c.get("title") or project["name"], platform="clip")
+                for c in project["clips"] if c.get("stale") or not c.get("file")]
+        return {"jobs": len(jobs)}
 
     @app.post("/api/clip/projects/{pid}/open-folder")
     async def clip_open_folder(pid: str):

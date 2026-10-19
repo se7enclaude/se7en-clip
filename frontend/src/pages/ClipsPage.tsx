@@ -1,20 +1,22 @@
 import clsx from "clsx";
-import { ArrowLeft, Check as CheckIcon, Clapperboard, Copy, FolderOpen, Link2, Minus, Plus, RefreshCw, Scissors, Sparkles, Square, Trash2, Upload, WandSparkles } from "lucide-react";
+import { ArrowLeft, Check as CheckIcon, Clapperboard, Copy, Crop, FolderOpen, KeyRound, Link2, Minus, Plus, RefreshCw, Scissors, Sparkles, Square, Trash2, Upload, WandSparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, localMediaUrl } from "../api/client";
 import { events } from "../api/ws";
+import { LayoutEditor, type Box } from "../components/LayoutEditor";
 import { Button, Empty, ErrorAlert, PageHead, Progress, Segmented, Select, Ticks } from "../components/ui";
 import { useFileIntake } from "../hooks/useFileIntake";
 import { duration as fmtDuration } from "../lib/format";
 import { useApp } from "../store/app";
 import "../styles/clip.css";
 
-type Layout = "auto" | "stream" | "face" | "fit";
+type Layout = "auto" | "stream" | "discord" | "face" | "fit";
 type Captions = "tiktok" | "hormozi" | "neon" | "clean" | "none";
 
 interface ClipLayout {
-  mode: "stream" | "face" | "fit";
+  mode: "stream" | "discord" | "face" | "fit";
   cam: number[] | null;
+  zone?: number[] | null;
 }
 
 interface Clip {
@@ -41,7 +43,7 @@ interface Project {
   name: string;
   status: "new" | "queued" | "analyzing" | "ready" | "error" | "paused";
   step: string | null;
-  error: { message: string; hint?: string } | null;
+  error: { code?: string; message: string; hint?: string } | null;
   notes: string[];
   source: { url: string | null; path: string | null };
   video: { duration: number; width: number; height: number } | null;
@@ -79,7 +81,9 @@ const STEPS: { id: string; label: string }[] = [
   { id: "layout", label: "Cadrage" },
   { id: "render", label: "Rendu" },
 ];
-const LAYOUT_LABEL: Record<string, string> = { auto: "Auto", stream: "Cam + jeu", face: "Visage suivi", fit: "Plein cadre" };
+const LAYOUT_LABEL: Record<string, string> = { auto: "Auto", stream: "Cam + jeu", discord: "Cam + Discord", face: "Visage suivi", fit: "Plein cadre" };
+const LOGIN_ERRORS = ["members_only", "login_required", "private", "age_restricted"];
+const isPatreon = (s: string) => /patreon\.com/i.test(s);
 const CAPTION_LABEL: Record<Captions, string> = { tiktok: "TikTok", hormozi: "Hormozi", neon: "Néon", clean: "Sobre", none: "Aucun" };
 
 const isUrl = (s: string) => /^https?:\/\//i.test(s.trim());
@@ -168,7 +172,7 @@ function statusText(s: string) {
 // ------------------------------------------------------------------ nouveau projet
 function NewProject({ onCreated, onError }: { onCreated: (p: Project) => void; onError: (e: any) => void }) {
   const [source, setSource] = useState("");
-  const [count, setCount] = useState("10");
+  const [count, setCount] = useState("0");
   const [length, setLength] = useState("medium");
   const [layout, setLayout] = useState<Layout>("auto");
   const [captions, setCaptions] = useState<Captions>("tiktok");
@@ -217,15 +221,27 @@ function NewProject({ onCreated, onError }: { onCreated: (p: Project) => void; o
           Trouver les clips
         </Button>
       </div>
+      {isPatreon(source) && (
+        <div className="clip-hint">
+          <KeyRound size={14} />
+          <span>Vidéo Patreon réservée aux membres ? se7en Clip doit utiliser ta connexion : choisis ton navigateur (connecté à Patreon) dans Réglages › Confidentialité › Cookies. Firefox fonctionne le mieux.</span>
+          <Button size="sm" variant="ghost" onClick={() => useApp.getState().goSettings("privacy")}>Ouvrir</Button>
+        </div>
+      )}
       <div className="clip-options">
         <Opt label="Clips">
-          <Segmented size="sm" value={count} onChange={setCount} options={["5", "10", "15", "20"].map((v) => ({ value: v, label: v }))} />
+          <Segmented
+            size="sm"
+            value={count}
+            onChange={setCount}
+            options={[{ value: "0", label: "Auto", tip: "Selon la durée : environ 1 clip toutes les 4 minutes (1 h → 15 clips)" }, ...["5", "10", "15", "20"].map((v) => ({ value: v, label: v }))]}
+          />
         </Opt>
         <Opt label="Durée">
           <Segmented size="sm" value={length} onChange={setLength} options={[{ value: "short", label: "15–35 s" }, { value: "medium", label: "20–60 s" }, { value: "long", label: "45–90 s" }]} />
         </Opt>
         <Opt label="Cadrage">
-          <Segmented size="sm" value={layout} onChange={setLayout} options={(["auto", "stream", "face", "fit"] as Layout[]).map((v) => ({ value: v, label: LAYOUT_LABEL[v] }))} />
+          <Segmented size="sm" value={layout} onChange={setLayout} options={(["auto", "stream", "discord", "face", "fit"] as Layout[]).map((v) => ({ value: v, label: LAYOUT_LABEL[v] }))} />
         </Opt>
         <Opt label="Sous-titres">
           <Segmented size="sm" value={captions} onChange={setCaptions} options={(Object.keys(CAPTION_LABEL) as Captions[]).map((v) => ({ value: v, label: CAPTION_LABEL[v] }))} />
@@ -248,6 +264,7 @@ function Opt({ label, children }: { label: string; children: React.ReactNode }) 
 function ProjectView({ id, live, onBack }: { id: string; live?: Live; onBack: () => void }) {
   const toast = useApp((s) => s.toast);
   const [p, setP] = useState<Project | null>(null);
+  const [editing, setEditing] = useState(false);
   const load = useCallback(() => api.get<Project>(`/api/clip/projects/${id}`).then(setP).catch((e) => toast({ kind: "error", title: e.message })), [id, toast]);
 
   useEffect(() => {
@@ -259,6 +276,7 @@ function ProjectView({ id, live, onBack }: { id: string; live?: Live; onBack: ()
 
   if (!p) return <div className="page-inner wide" />;
   const running = busy(p);
+  const lay = p.layout ?? p.clips[0]?.layout;
   const stepIndex = STEPS.findIndex((s) => s.id === p.step);
 
   const act = async (fn: () => Promise<unknown>) => {
@@ -287,7 +305,11 @@ function ProjectView({ id, live, onBack }: { id: string; live?: Live; onBack: ()
             ) : (
               <>
                 <Button icon={<FolderOpen size={15} />} onClick={() => act(() => api.post(`/api/clip/projects/${id}/open-folder`))}>Dossier</Button>
-                <Button icon={<Plus size={15} />} onClick={() => act(() => api.post(`/api/clip/projects/${id}/analyze`, { count: (p.options.count || 10) + 5 }))}>5 clips de plus</Button>
+                {p.clips.length > 0 && <Button icon={<Crop size={15} />} onClick={() => setEditing(true)}>Cadrage</Button>}
+                {p.clips.some((c) => c.stale || !c.file) && (
+                  <Button variant="primary" icon={<RefreshCw size={15} />} onClick={() => act(() => api.post(`/api/clip/projects/${id}/render-all`))}>Refaire les rendus</Button>
+                )}
+                <Button icon={<Plus size={15} />} onClick={() => act(() => api.post(`/api/clip/projects/${id}/analyze`, { count: p.clips.length + 5 }))}>5 clips de plus</Button>
               </>
             )}
             <Button
@@ -324,7 +346,15 @@ function ProjectView({ id, live, onBack }: { id: string; live?: Live; onBack: ()
       )}
 
       {p.status === "error" && p.error && (
-        <ErrorAlert error={{ code: "clip_failed", message: p.error.message, hint: p.error.hint }} actions={<Button icon={<RefreshCw size={14} />} onClick={() => act(() => api.post(`/api/clip/projects/${id}/analyze`, {}))}>Réessayer</Button>} />
+        <ErrorAlert
+          error={{ code: "clip_failed", message: p.error.message, hint: LOGIN_ERRORS.includes(p.error.code ?? "") ? "Connecte-toi au site dans ton navigateur, puis choisis ce navigateur dans Réglages › Confidentialité › Cookies (ou importe un fichier cookies.txt)." : p.error.hint }}
+          actions={
+            <>
+              {LOGIN_ERRORS.includes(p.error.code ?? "") && <Button icon={<KeyRound size={14} />} onClick={() => useApp.getState().goSettings("privacy")}>Cookies</Button>}
+              <Button icon={<RefreshCw size={14} />} onClick={() => act(() => api.post(`/api/clip/projects/${id}/analyze`, {}))}>Réessayer</Button>
+            </>
+          }
+        />
       )}
       {p.status === "paused" && (
         <div className="card card-pad row" style={{ gap: 12 }}>
@@ -336,6 +366,21 @@ function ProjectView({ id, live, onBack }: { id: string; live?: Live; onBack: ()
       {p.notes?.map((n) => (
         <div key={n} className="card card-pad faint" style={{ marginBottom: 12 }}>{n}</div>
       ))}
+
+      <LayoutEditor
+        open={editing}
+        projectId={id}
+        duration={p.video?.duration ?? 0}
+        initial={{ mode: (lay?.mode ?? "fit") as any, cam: (lay?.cam as Box) ?? null, zone: (lay?.zone as Box) ?? null, at: (p.clips[0]?.start ?? 0) + 2 }}
+        onClose={() => setEditing(false)}
+        onSave={async (v) => {
+          await act(async () => {
+            await api.put(`/api/clip/projects/${id}/layout`, { ...v, apply_all: true });
+            await api.post(`/api/clip/projects/${id}/render-all`);
+          });
+          setEditing(false);
+        }}
+      />
 
       {p.clips.length > 0 && (
         <div className="clip-grid">
@@ -437,8 +482,17 @@ function ClipCard({ project, clip, rank, onChange }: { project: Project; clip: C
         <div className="row" style={{ gap: 8, marginTop: 10 }}>
           <Select
             value={clip.layout.mode}
-            options={(["stream", "face", "fit"] as const).map((v) => ({ value: v, label: LAYOUT_LABEL[v] }))}
-            onChange={(v) => patch({ layout: { ...clip.layout, mode: v, cam: v === "stream" ? clip.layout.cam ?? project.layout?.cam ?? [0, 0, 0.3, 0.3] : clip.layout.cam } })}
+            options={(["stream", "discord", "face", "fit"] as const).map((v) => ({ value: v, label: LAYOUT_LABEL[v] }))}
+            onChange={(v) =>
+              patch({
+                layout: {
+                  ...clip.layout,
+                  mode: v,
+                  cam: v === "stream" || v === "discord" ? clip.layout.cam ?? project.layout?.cam ?? [0, 0, 0.3, 0.3] : clip.layout.cam,
+                  zone: v === "discord" ? clip.layout.zone ?? project.layout?.zone ?? [0.55, 0.1, 0.43, 0.8] : clip.layout.zone,
+                },
+              })
+            }
           />
           <Select value={clip.captions} options={(Object.keys(CAPTION_LABEL) as Captions[]).map((v) => ({ value: v, label: CAPTION_LABEL[v] }))} onChange={(v) => patch({ captions: v })} />
         </div>

@@ -15,7 +15,7 @@ from ..errors import MediaLabError
 
 _lock = threading.RLock()
 
-DEFAULT_OPTIONS = {"count": 10, "min_len": 20, "max_len": 75, "layout": "auto", "captions": "tiktok",
+DEFAULT_OPTIONS = {"count": 0, "min_len": 20, "max_len": 75, "layout": "auto", "captions": "tiktok",
                    "language": "auto", "use_ai": True}
 CLIP_EDITABLE = {"start", "end", "title", "description", "hashtags", "layout", "captions"}
 

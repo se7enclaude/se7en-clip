@@ -275,7 +275,7 @@ function onEvent(ev: AppEvent): void {
       const st = s.settings;
       if (st && !st.general.notifications) break;
       if (ev.data.kind === "success") {
-        const doneKey: Record<string, string> = { upscale: "notify.upscaleDone", convert: "notify.convertDone", trim: "notify.trimDone" };
+        const doneKey: Record<string, string> = { clip: "notify.clipDone", upscale: "notify.upscaleDone", convert: "notify.convertDone", trim: "notify.trimDone" };
         s.toast({
           kind: "success",
           title: translate(doneKey[ev.data.job_kind] ?? "notify.downloadDone"),

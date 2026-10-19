@@ -50,7 +50,10 @@ def render(src: Path, video: dict, clip: dict, words: list[dict], dst: Path, can
         style_name = clip.get("captions") or "tiktok"
         cues = captions.chunks(words, start, end) if style_name != "none" else []
         _, seam = reframe.filtergraph(layout, sw, sh, False, track_file)
-        if layout.mode == "stream":
+        if layout.mode == "discord":
+            # en bas de la cam : les messages Discord restent lisibles
+            style = captions.style_for(style_name, "top", max(4.0, seam - 13))
+        elif layout.mode == "stream":
             style = captions.style_for(style_name, "top", seam)
         else:
             style = captions.style_for(style_name, "bottom", 26.0)

@@ -24,6 +24,11 @@ from . import reframe, render, scoring
 log = get_logger("clip")
 Progress = Callable[[float, str, float | None], None]
 
+def auto_count(duration: float) -> int:
+    """Nombre de clips proportionnel à la durée : environ un clip toutes les 4 minutes (3 à 30)."""
+    return max(3, min(30, round(duration / 240)))
+
+
 # part de la barre de progression de chaque étape
 STEPS = [("download", 0.00, 0.15), ("audio", 0.15, 0.18), ("transcribe", 0.18, 0.55), ("moments", 0.55, 0.57),
          ("judge", 0.57, 0.75), ("layout", 0.75, 0.78), ("render", 0.78, 1.00)]
@@ -200,7 +205,8 @@ def analyze(pid: str, settings, jctx, progress: Progress, render_clips: bool = T
     loud = M.loudness_per_second(T.read_wav(wav))
     sig = M.signals(float(video["duration"] or len(loud)), loud, words, chat)
     sents = M.sentences(words)
-    count = max(1, min(50, int(opts.get("count") or 10)))
+    count = int(opts.get("count") or 0) or auto_count(float(video["duration"] or 0))  # 0 = automatique
+    count = max(1, min(50, count))
     cands = M.candidates(sents, sig, float(opts.get("min_len") or 20), float(opts.get("max_len") or 75),
                          keep=max(12, min(60, count * 4)))
     if not cands:
@@ -228,9 +234,7 @@ def analyze(pid: str, settings, jctx, progress: Progress, render_clips: bool = T
         layout = reframe.detect_layout(src, float(video["duration"]), int(video["width"]), int(video["height"]), cancel)
         layout_file.write_text(json.dumps(layout.to_dict()), "utf-8")
     if forced != "auto":
-        layout = reframe.Layout(forced, layout.cam if forced == "stream" else None, 1.0)
-        if forced == "stream" and not layout.cam:
-            layout.cam = (0.0, 0.0, 0.3, 0.3)  # à ajuster à la main
+        layout = forced_layout(forced, layout)
     clips = []
     for m in best:
         clips.append({"id": uuid.uuid4().hex[:10], **m, "layout": layout.to_dict(),
@@ -250,6 +254,17 @@ def analyze(pid: str, settings, jctx, progress: Progress, render_clips: bool = T
     project = P.patch(pid, {"status": "ready", "step": None})
     progress(1.0, "Terminé", 0)
     return project
+
+
+def forced_layout(mode: str, detected: reframe.Layout) -> reframe.Layout:
+    """Mise en page choisie par l'utilisateur, en gardant ce que la détection a trouvé (cam, zone Discord)."""
+    cam = detected.cam if mode in ("stream", "discord") else None
+    zone = detected.zone if mode == "discord" else None
+    if mode in ("stream", "discord") and not cam:
+        cam = (0.0, 0.0, 0.3, 0.3)  # à ajuster dans « Régler le cadrage »
+    if mode == "discord" and not zone:
+        zone = (0.55, 0.1, 0.43, 0.8)
+    return reframe.Layout(mode, cam, 1.0, zone)
 
 
 def render_one(pid: str, cid: str, settings, cancel: threading.Event, progress: Callable[[float, str], None],

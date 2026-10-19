@@ -138,6 +138,40 @@ def test_chat_replay_parsing(tmp_path):
     assert pipeline._parse_chat(tw) == [40.5, 41.0]
 
 
+def test_discord_zone_found_on_stable_discord_colors():
+    rng = np.random.default_rng(3)
+    masks = []
+    for _ in range(10):
+        img = rng.integers(0, 255, (360, 640, 3), dtype=np.uint8)  # jeu : couleurs qui changent
+        img[40:330, 380:630] = (49, 51, 56)  # fenêtre Discord (fond des messages)
+        img[40:330, 380:440] = (43, 45, 49)  # sa barre latérale
+        masks.append(reframe.discord_mask(img))
+    x, y, w, h = reframe.discord_zone(masks)
+    assert abs(x - 380 / 640) < 0.03 and abs(y - 40 / 360) < 0.05
+    assert abs(w - 250 / 640) < 0.04 and abs(h - 290 / 360) < 0.06
+
+
+def test_no_discord_zone_on_plain_game():
+    rng = np.random.default_rng(4)
+    masks = [reframe.discord_mask(rng.integers(0, 255, (360, 640, 3), dtype=np.uint8)) for _ in range(10)]
+    assert reframe.discord_zone(masks) is None
+
+
+def test_auto_count_follows_duration():
+    from medialab.clip.pipeline import auto_count
+    assert auto_count(10 * 60) == 3
+    assert auto_count(60 * 60) == 15
+    assert auto_count(4 * 3600) == 30
+
+
+def test_discord_filtergraph():
+    lay = reframe.Layout("discord", (0.0, 0.7, 0.25, 0.3), 1.0, (0.6, 0.05, 0.38, 0.9))
+    g, seam = reframe.filtergraph(lay, 1920, 1080, True, False)
+    assert g.count("crop=") == 4 and "vstack" in g and "overlay" in g and g.endswith("[v]")
+    assert 30 < seam < 50
+    assert reframe.Layout.from_dict(lay.to_dict()) == lay
+
+
 def test_cam_box_snaps_to_corner():
     x, y, w, h = reframe.cam_box(0.12, 0.85, 0.06, 0.11, 16 / 9)
     assert x == 0.0 and abs(y + h - 1.0) < 1e-6

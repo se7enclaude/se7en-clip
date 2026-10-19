@@ -7,6 +7,7 @@ export const fr: Record<string, string> = {
   "nav.workspace": "Espace de travail",
   "nav.library": "Bibliothèque",
   "nav.system": "Système",
+  "notify.clipDone": "Clips prêts",
   "nav.clips": "Clips",
   "nav.download": "Télécharger",
   "nav.upscale": "IA",
