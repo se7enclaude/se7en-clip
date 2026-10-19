@@ -1,6 +1,8 @@
-## se7en Clip 0.4.2
+## se7en Clip 0.4.3
 
-- **Plus de fichier .txt** à côté des clips : le dossier ne contient que les vidéos et leurs miniatures. Le titre et les hashtags restent copiables d'un clic dans l'appli (« Copier titre + hashtags »). Les anciens .txt sont enlevés quand un clip est refait.
-- **Sous-titres : Oui / Non.** Un interrupteur au lancement d'un projet, et un autre sur chaque clip. Quand ils sont activés, vous choisissez le style (TikTok, Hormozi, Néon, Sobre).
+- **Des noms de clips qui disent ce qui se passe.** Le titre (et donc le nom du fichier) est maintenant un résumé rapide du moment, par exemple « Le streamer se moque de l'homme qui se masturbe en public », au lieu d'une phrase d'accroche « Quand… ». La phrase accrocheuse pour la publication reste dans la description.
+- Les titres collés sans espaces sont réparés.
+
+Les projets déjà faits gardent leurs noms ; les nouveaux en profitent.
 
 Installez ou mettez à jour depuis **Seventh OS** ; l'appli propose aussi la mise à jour toute seule.

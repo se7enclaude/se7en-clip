@@ -34,8 +34,14 @@ Choisis la phrase de début et de fin (numéros) pour le meilleur clip possible 
 près de l'accroche, finis juste après la chute. Sois exigeant : un passage banal (explications, blabla, menus, \
 silences) vaut moins de 40. Un très bon clip vaut plus de 80.
 
-Le titre : court (max 70 caractères), accrocheur, dans la langue de l'extrait, sans guillemets, et fidèle : n'invente aucun fait, aucun nom, aucun chiffre qui n'est pas dans l'extrait. La description : \
-une phrase. Hashtags : 3 à 5, sans espace, avec #. Réponds uniquement en JSON."""
+Le titre sert de nom au fichier du clip : un résumé rapide et factuel de ce qui se passe, comme une légende \
+(max 60 caractères), dans la langue de l'extrait : une phrase simple et bien écrite, avec des espaces et des \
+articles. Dis qui fait quoi : « Le streamer se moque du plan de Ted », « Débat sur le don de sperme ». Dans une \
+réaction, distingue le streamer (celui qui commente) de ce qu'il regarde (film, vidéo, jeu) : ne prête pas au \
+streamer ce que disent les personnages. Pas d'accroche ni de formule TikTok (jamais « Quand… », « POV », « Incroyable »), \
+pas d'emoji, pas de hashtag, pas de guillemets, pas de point final. Fidèle : n'invente aucun fait, aucun nom, aucun \
+chiffre qui n'est pas dans l'extrait. La description : une phrase accrocheuse pour la publication. Hashtags : 3 à 5, \
+sans espace, avec #. Réponds uniquement en JSON."""
 
 SCHEMA = {
     "type": "object",
@@ -95,6 +101,15 @@ def _clean_tags(tags: list) -> list[str]:
     return out[:5]
 
 
+def tidy_title(title: str) -> str:
+    """Titre propre pour un nom de fichier : sans guillemets ni point final ; un titre collé par l'IA
+    (« TomBradyDemandeSignature ») retrouve ses espaces."""
+    t = str(title or "").strip().strip('"«»“”').strip()
+    if " " not in t and len(t) > 8:
+        t = re.sub(r"(?<=[a-zà-ÿ])(?=[A-ZÀ-Þ0-9])|(?<=[0-9])(?=[A-Za-zÀ-ÿ])", " ", t)
+    return t.rstrip(" .")[:90]
+
+
 def fallback_meta(sents: list[M.Sentence], c: M.Candidate) -> dict:
     first = sents[c.first].text.strip()
     title = (first[:67] + "…") if len(first) > 70 else first
@@ -145,7 +160,7 @@ def _merge(sents: list[M.Sentence], c: M.Candidate, ai: dict | None) -> dict:
             first, last = cand_first, cand_last
         ai_score = max(0, min(100, int(ai.get("score", 0)))) / 100
         score = 0.7 * ai_score + 0.3 * pre
-        meta = {"title": str(ai.get("title") or "").strip().strip('"«»“”').strip()[:90],
+        meta = {"title": tidy_title(ai.get("title")),
                 "description": str(ai.get("description") or "").strip()[:300],
                 "hashtags": _clean_tags(ai.get("hashtags")), "why": str(ai.get("why") or "").strip()[:300],
                 "hook": int(ai.get("hook", 0)), "payoff": int(ai.get("payoff", 0)),

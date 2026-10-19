@@ -195,3 +195,9 @@ def test_chat_filtergraph():
     assert "color=c=0x18181B" in g and "d=42.500" in g and "ass=chat.ass" in g and g.endswith("ass=subs.ass[v]")
     assert 30 < seam < 50
     assert reframe.Layout.from_dict({"mode": "discord", "cam": [0, 0, 0.2, 0.2]}).mode == "stream"
+
+
+def test_title_is_tidied_for_file_names():
+    from medialab.clip.scoring import tidy_title
+    assert tidy_title("TomBradyDemandeUneSignature") == "Tom Brady Demande Une Signature"
+    assert tidy_title("« Le streamer rit. »") == "Le streamer rit"
