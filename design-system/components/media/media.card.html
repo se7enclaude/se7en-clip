@@ -1,0 +1,22 @@
+<!-- @dsCard group="Components" viewport="700x560" name="Media" subtitle="PixelImage, DownloadItem, CompareSlider, MediaFrame, GlassPanel" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Media</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>body{padding:24px}.row{display:flex;flex-wrap:wrap;align-items:center;gap:12px}.col{display:flex;flex-direction:column;gap:16px}.lbl{font:var(--type-label);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--text-tertiary);width:84px;flex-shrink:0}</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script></head><body><div id="root"></div>
+<script type="text/babel">
+const { PixelImage, DownloadItem, CompareSlider, MediaFrame, GlassPanel, Badge, IconButton } = window.DownloadEverythingDesignSystem_620170;
+function Demo(){
+return <div className="col">
+<DownloadItem title="Coucher de soleil — Lisbonne" source="vimeo.com" specs={['MP4','1080p','212 MB']} status="downloading" progress={46} speed="18.2 MB/s"/>
+<DownloadItem title="portrait_studio_01" source="instagram.com" kind="photo" specs={['PNG','4×']} status="upscaling" progress={72}/>
+<DownloadItem title="Interview complète" source="youtube.com" specs={['MP3','320 kbps']} kind="audio" status="done"/>
+<div className="row" style={{alignItems:'stretch',flexWrap:'nowrap'}}>
+<CompareSlider ratio="16/10" style={{flex:1.3}}/>
+<div className="col" style={{flex:1}}><MediaFrame kind="photo" label="3840×2160"><Badge mono style={{position:'absolute',top:8,left:8}}>4K</Badge></MediaFrame><GlassPanel padding={14} tone="solid"><div style={{font:'var(--weight-bold) 14px/1.2 var(--font-sans)'}}>GlassPanel</div><div style={{font:'var(--type-body-sm)',color:'var(--text-tertiary)'}}>Surface solid / verre</div></GlassPanel></div>
+</div>
+</div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script></body></html>

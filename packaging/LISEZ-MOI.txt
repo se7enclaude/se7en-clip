@@ -1,0 +1,23 @@
+se7en Clip — Clip farm TikTok · Shorts · Reels, 100 % sur votre PC
+==================================================================
+
+Version installée (recommandée) : lancez se7en-Clip-Setup.exe, puis se7en Clip depuis le menu Démarrer.
+  - FFmpeg et les moteurs sont inclus. Au premier projet, se7en Clip télécharge une fois le modèle de
+    transcription (~0,9 Go) et l'IA de texte qui choisit les moments (~5 Go).
+  - se7en Clip se met à jour tout seul.
+  - Si Windows affiche "Windows a protégé votre ordinateur" :
+    cliquer sur "Informations complémentaires" puis "Exécuter quand même".
+
+Utilisation :
+1. Collez un lien (rediff Twitch, YouTube, Kick…) ou glissez une vidéo.
+2. Choisissez le nombre de clips, leur durée, le cadrage et le style de sous-titres.
+3. se7en Clip transcrit la vidéo, trouve les meilleurs moments, les met en vertical (cam en haut et jeu en
+   bas pour un stream, ou visage suivi) et ajoute les sous-titres mot par mot.
+4. Les clips sont dans Vidéos\se7en Clip\<nom de la vidéo>, avec un .txt (titre, description, hashtags).
+
+Version portable (ce dossier) :
+1. Extraire TOUT le zip (clic droit sur le .zip > Extraire tout...).
+2. Double-cliquer sur se7en-clip.exe. Vos réglages restent dans le dossier "data" à côté.
+
+En cas de problème : Réglages > Avancé > Logs, ou envoyer le fichier data\logs\crash.log.
+N'utilisez se7en Clip que pour des vidéos que vous avez le droit de reprendre.

@@ -1,0 +1,19 @@
+<!-- @dsCard group="Components" viewport="700x300" name="Core" subtitle="Button, IconButton, Badge, Icon" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Core</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>body{padding:24px}.row{display:flex;flex-wrap:wrap;align-items:center;gap:12px}.col{display:flex;flex-direction:column;gap:16px}.lbl{font:var(--type-label);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--text-tertiary);width:84px;flex-shrink:0}</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script></head><body><div id="root"></div>
+<script type="text/babel">
+const { Button, IconButton, Badge, Icon } = window.DownloadEverythingDesignSystem_620170;
+function Demo(){
+return <div className="col">
+<div className="row"><span className="lbl">Button</span><Button icon="download">Télécharger</Button><Button variant="secondary" iconRight="arrow-right">Voir plus</Button><Button variant="outline">Annuler</Button><Button variant="ghost">Ignorer</Button><Button variant="light" size="sm">Light</Button></div>
+<div className="row"><span className="lbl">Sizes</span><Button size="sm">Small</Button><Button>Medium</Button><Button size="lg" icon="sparkles">Upscaler</Button><Button disabled>Disabled</Button></div>
+<div className="row"><span className="lbl">IconButton</span><IconButton icon="arrow-right" label="Suivant"/><IconButton icon="arrow-up-right" variant="solid"/><IconButton icon="house" variant="glass" active/><IconButton icon="heart" variant="glass"/><IconButton icon="share-2" variant="light" size={36}/></div>
+<div className="row"><span className="lbl">Badge</span><Badge>Photo</Badge><Badge tone="accent">Nouveau</Badge><Badge tone="success" icon="check">Terminé</Badge><Badge tone="warning">Échec</Badge><Badge tone="info">Upscale</Badge><Badge mono>2160p</Badge><Badge mono>48 MB</Badge></div>
+</div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script></body></html>

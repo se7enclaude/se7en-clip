@@ -1,0 +1,27 @@
+:root{
+/* Ink — near-black neutrals (default theme) */
+--ink-0:#050505;--ink-1:#0B0B0C;--ink-2:#121213;--ink-3:#1A1A1C;--ink-4:#242427;--ink-5:#333337;
+/* Fog — warm whites / text on dark */
+--fog-0:#FFFFFF;--fog-1:#F4F3F1;--fog-2:#B9B8B5;--fog-3:#7D7C79;--fog-4:#4E4D4B;
+/* Steel — cool greys (light theme) */
+--steel-100:#E6E9ED;--steel-200:#D3D8DE;--steel-300:#BFC6CE;--steel-400:#9AA3AD;--steel-500:#77808B;--steel-600:#5A626C;--steel-700:#3F464E;
+/* Signal red — the single brand accent (the "7") */
+--red-100:#FFE1E1;--red-300:#FF8A8A;--red-400:#FF4D4D;--red-500:#F22B2B;--red-600:#C81E1E;--red-700:#8A1414;--red-900:#240707;
+/* Semantic hues */
+--green-400:#3FD68F;--green-900:#0C2519;--amber-400:#F5B544;--amber-900:#2A1F0B;--blue-400:#6FA8FF;--blue-900:#0E1B31;
+
+--bg-app:var(--ink-0);--surface-1:var(--ink-1);--surface-2:var(--ink-2);--surface-3:var(--ink-3);--surface-raised:var(--ink-3);
+--surface-glass:rgba(11,11,12,.66);--surface-glass-light:rgba(255,255,255,.06);
+--border-subtle:rgba(255,255,255,.07);--border-default:rgba(255,255,255,.12);--border-strong:rgba(255,255,255,.26);
+--text-primary:var(--fog-1);--text-secondary:var(--fog-2);--text-tertiary:var(--fog-3);--text-disabled:var(--fog-4);--text-on-accent:#FFFFFF;
+--accent:var(--red-500);--accent-hover:var(--red-400);--accent-press:var(--red-600);--accent-soft:var(--red-900);--accent-text:var(--red-400);
+--success:var(--green-400);--success-soft:var(--green-900);--warning:var(--amber-400);--warning-soft:var(--amber-900);--info:var(--blue-400);--info-soft:var(--blue-900);--danger:var(--red-400);--danger-soft:var(--red-900);
+--focus-ring:rgba(242,43,43,.45);
+}
+[data-theme="light"]{
+--bg-app:var(--fog-1);--surface-1:#FFFFFF;--surface-2:#FFFFFF;--surface-3:var(--steel-100);--surface-raised:#FFFFFF;
+--surface-glass:rgba(255,255,255,.7);--surface-glass-light:rgba(0,0,0,.04);
+--border-subtle:rgba(10,10,10,.07);--border-default:rgba(10,10,10,.12);--border-strong:rgba(10,10,10,.3);
+--text-primary:#0B0B0C;--text-secondary:#3E3D3B;--text-tertiary:#7D7C79;--text-disabled:#B9B8B5;
+--accent-soft:var(--red-100);--accent-text:var(--red-600);--success-soft:#DDF7EA;--warning-soft:#FCEFD6;--info-soft:#E2EDFF;--danger-soft:var(--red-100);
+}

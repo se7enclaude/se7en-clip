@@ -1,0 +1,11 @@
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg-app);color:var(--text-primary);font-family:var(--font-sans);font-size:var(--text-md);line-height:var(--leading-normal);-webkit-font-smoothing:antialiased}
+a{color:var(--accent-text);text-decoration:none}
+a:hover{color:var(--text-primary);text-decoration:underline;text-underline-offset:3px}
+::selection{background:var(--accent);color:#fff}
+[class^="icon-"],[class*=" icon-"]{line-height:1;display:inline-flex}
+@keyframes se7en-blink{50%{opacity:0}}
+@keyframes se7en-scan{from{transform:translateY(-100%)}to{transform:translateY(100vh)}}
+@keyframes se7en-marquee{to{transform:translateX(-50%)}}
+@keyframes se7en-rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
