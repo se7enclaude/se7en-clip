@@ -248,6 +248,11 @@ class YtDlpProvider(SourceProvider):
         opts = self._base_opts(s, logger)
         if options.get("referer"):  # a video found inside a web page: the server may want to know which one
             opts["http_headers"] = {"Referer": options["referer"]}
+        if options.get("user_agent"):  # session ouverte dans une fenêtre de l'appli : même navigateur qu'elle
+            opts.setdefault("http_headers", {})["User-Agent"] = options["user_agent"]
+        if options.get("impersonate"):  # empreinte réseau d'un vrai navigateur (curl_cffi), exigée par Cloudflare
+            from yt_dlp.networking.impersonate import ImpersonateTarget
+            opts["impersonate"] = ImpersonateTarget.from_str(options["impersonate"])
         if strategy.get("concurrent_fragments"):
             opts["concurrent_fragment_downloads"] = strategy["concurrent_fragments"]
         if strategy.get("force_ipv4"):

@@ -68,6 +68,12 @@ def _download(project: dict, settings, jctx, st: Stepper) -> Path:
     provider = registry.get("ytdlp")
     opts = {"mode": "av", "quality": "1080", "container": "mp4", "output_dir": str(out), "folder_structure": "",
             "embed_thumbnail": False, "write_subtitles": False}
+    from . import login
+    site = login.site_for(url)
+    if site and settings.privacy.cookies_mode == "file":
+        # session ouverte dans « Se connecter à … » : Cloudflare refuse (« Forbidden ») si le téléchargement ne se
+        # présente pas comme le même navigateur, avec l'empreinte réseau de Chrome
+        opts.update({"user_agent": login.user_agent(site), "impersonate": "chrome"})
 
     def attempt(s):
         dctx = DownloadContext(job_id=jctx.job["id"], settings=s, cancel=jctx.cancel, progress=on_progress,

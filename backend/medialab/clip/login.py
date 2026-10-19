@@ -48,6 +48,43 @@ def _allow_popups() -> None:
     ec.EdgeChrome._se7en_popups = True
 
 
+def _ua_file():
+    from ..config import paths
+    return paths().data / "login_ua.json"
+
+
+def user_agent(site_id: str) -> str:
+    """Le navigateur de la fenêtre de connexion : Cloudflare lie la session à lui (sinon « Forbidden »)."""
+    import json
+    try:
+        ua = json.loads(_ua_file().read_text("utf-8")).get(site_id)
+        if ua:
+            return ua
+    except (OSError, ValueError):
+        pass
+    from .. import preflight
+    major = (preflight.webview2_version() or "141.0.0.0").split(".")[0]
+    return (f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{major}.0.0.0 "
+            f"Safari/537.36 Edg/{major}.0.0.0")
+
+
+def _save_user_agent(site_id: str, ua: str) -> None:
+    import json
+    f = _ua_file()
+    try:
+        data = json.loads(f.read_text("utf-8")) if f.exists() else {}
+    except (OSError, ValueError):
+        data = {}
+    data[site_id] = ua
+    f.write_text(json.dumps(data), "utf-8")
+
+
+def site_for(url: str) -> str | None:
+    """Le site connecté qui correspond à ce lien (pour télécharger avec la même identité de navigateur)."""
+    low = (url or "").lower()
+    return next((sid for sid, s in SITES.items() if s["domain"] in low), None)
+
+
 def _stored_lines() -> list[str]:
     p = store._store_path()
     if not p.exists():
@@ -134,6 +171,12 @@ def open_window(site_id: str, settings_store) -> dict:
         try:
             if save_cookies(site_id, win.get_cookies()):
                 done.set()
+                try:
+                    ua = win.evaluate_js("navigator.userAgent")
+                    if ua:
+                        _save_user_agent(site_id, str(ua))
+                except Exception as e:  # sinon : déduit de la version de WebView2
+                    log.debug("user agent: %s", e)
                 settings_store.update({"privacy": {"cookies_mode": "file"}})
                 log.info("Signed in to %s; session stored (encrypted)", site["name"])
                 bus.publish("clip_login", {"site": site_id, "ok": True})
