@@ -26,6 +26,26 @@ SITES = {
 
 _lock = threading.Lock()
 _open: dict[str, object] = {}
+_popup_ok: set[str] = set()  # fenêtres de connexion (uid pywebview) qui ont le droit d'ouvrir des pop-ups
+
+
+def _allow_popups() -> None:
+    """« Continuer avec Google / Apple / Facebook » ouvre un pop-up qui renvoie la connexion à la page d'origine
+    (window.opener). pywebview intercepte tous les pop-ups (ouverts dans le navigateur, ou à la place de la page) :
+    la connexion se perdait sur une page blanche. Pour nos fenêtres de connexion, on laisse WebView2 ouvrir
+    son propre pop-up, relié à la page."""
+    from webview.platforms import edgechromium as ec
+    if getattr(ec.EdgeChrome, "_se7en_popups", False):
+        return
+    original = ec.EdgeChrome.on_new_window_request
+
+    def on_new_window_request(self, sender, args):
+        if getattr(self.pywebview_window, "uid", None) in _popup_ok:
+            return  # non géré : WebView2 crée le pop-up lui-même
+        return original(self, sender, args)
+
+    ec.EdgeChrome.on_new_window_request = on_new_window_request
+    ec.EdgeChrome._se7en_popups = True
 
 
 def _stored_lines() -> list[str]:
@@ -96,18 +116,22 @@ def open_window(site_id: str, settings_store) -> dict:
                 return {"opened": True}
             except Exception:
                 _open.pop(site_id, None)
+        try:
+            _allow_popups()
+        except Exception as e:  # autre moteur de fenêtre : la connexion par e-mail marche quand même
+            log.warning("Login popups not enabled: %s", e)
         win = webview.create_window(f"Se connecter à {site['name']} — se7en Clip", site["url"], width=520, height=780)
+        _popup_ok.add(win.uid)
         _open[site_id] = win
 
     done = threading.Event()
+    checking = threading.Lock()
 
     def check() -> None:
-        if done.is_set():
+        # la session existe dès que le cookie de session apparaît (même si la page reste sur /login un instant)
+        if done.is_set() or not checking.acquire(blocking=False):
             return
         try:
-            url = win.get_current_url() or ""
-            if "/login" in url or "/signup" in url or "accounts" in url:
-                return
             if save_cookies(site_id, win.get_cookies()):
                 done.set()
                 settings_store.update({"privacy": {"cookies_mode": "file"}})
@@ -117,15 +141,30 @@ def open_window(site_id: str, settings_store) -> dict:
                 win.destroy()
         except Exception as e:  # la page n'est pas encore prête : on réessaiera au prochain chargement
             log.debug("login check: %s", e)
+        finally:
+            checking.release()
 
     def on_closed() -> None:
         with _lock:
             _open.pop(site_id, None)
+            _popup_ok.discard(win.uid)
         if not done.is_set():
             bus.publish("clip_login", {"site": site_id, "ok": False})
 
+    closed = threading.Event()
+
+    def poll() -> None:
+        # après un pop-up Google, Patreon peut se connecter sans recharger la page : on vérifie régulièrement
+        while not done.is_set() and not closed.wait(2.0):
+            check()
+
+    def on_closed_all() -> None:
+        closed.set()
+        on_closed()
+
     win.events.loaded += lambda: threading.Thread(target=check, daemon=True).start()
-    win.events.closed += on_closed
+    win.events.closed += on_closed_all
+    threading.Thread(target=poll, daemon=True, name="login-poll").start()
     return {"opened": True}
 
 
