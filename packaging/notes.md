@@ -1,10 +1,6 @@
-## se7en Clip 0.4.1
+## se7en Clip 0.4.2
 
-- **Vos propres vidéos, pas seulement des liens.** Cliquez sur « Choisir une vidéo », glissez un fichier dans la fenêtre, ou collez son chemin (clic droit › « Copier en tant que chemin » dans l'Explorateur). Le nom du fichier s'affiche : réglez les options puis « Trouver les clips ».
-- Plusieurs vidéos glissées d'un coup : un projet chacune, lancé tout de suite.
-- Un lien glissé depuis le navigateur arrive directement dans le champ.
-- Hashtags mieux séparés.
-
-Toujours valable : cam du streamer bien cadrée, bas stable, sous-titres lisibles (0.4.0).
+- **Plus de fichier .txt** à côté des clips : le dossier ne contient que les vidéos et leurs miniatures. Le titre et les hashtags restent copiables d'un clic dans l'appli (« Copier titre + hashtags »). Les anciens .txt sont enlevés quand un clip est refait.
+- **Sous-titres : Oui / Non.** Un interrupteur au lancement d'un projet, et un autre sur chaque clip. Quand ils sont activés, vous choisissez le style (TikTok, Hormozi, Néon, Sobre).
 
 Installez ou mettez à jour depuis **Seventh OS** ; l'appli propose aussi la mise à jour toute seule.

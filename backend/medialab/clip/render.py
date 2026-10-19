@@ -104,9 +104,3 @@ def render(src: Path, video: dict, clip: dict, words: list[dict], dst: Path, can
             "rendered_at": time.time()}
 
 
-def write_caption_file(dst: Path, clip: dict) -> Path:
-    """Le texte à coller sur TikTok : titre, description, hashtags."""
-    txt = "\n\n".join(x for x in (clip.get("title"), clip.get("description"), " ".join(clip.get("hashtags") or [])) if x)
-    p = dst.with_suffix(".txt")
-    p.write_text(txt + "\n", "utf-8")
-    return p

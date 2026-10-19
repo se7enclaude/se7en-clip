@@ -364,3 +364,10 @@
 .clip-hint.ok {
   background: var(--success-soft);
 }
+
+.clip-check {
+  gap: 8px;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}

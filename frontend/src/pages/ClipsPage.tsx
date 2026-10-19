@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, localMediaUrl } from "../api/client";
 import { events } from "../api/ws";
 import { LayoutEditor, type Box } from "../components/LayoutEditor";
-import { Button, Empty, ErrorAlert, PageHead, Progress, Segmented, Select, Ticks } from "../components/ui";
+import { Button, Empty, ErrorAlert, PageHead, Progress, Segmented, Select, Switch, Ticks } from "../components/ui";
 import { useFileIntake } from "../hooks/useFileIntake";
 import { duration as fmtDuration } from "../lib/format";
 import { useApp } from "../store/app";
@@ -117,6 +117,7 @@ function usePatreonLogin() {
   return { connected, opening, login, logout };
 }
 const CAPTION_LABEL: Record<Captions, string> = { tiktok: "TikTok", hormozi: "Hormozi", neon: "Néon", clean: "Sobre", none: "Aucun" };
+const CAPTION_STYLES = (Object.keys(CAPTION_LABEL) as Captions[]).filter((v) => v !== "none").map((v) => ({ value: v, label: CAPTION_LABEL[v] }));
 
 const isUrl = (s: string) => /^https?:\/\//i.test(s.trim());
 /** Un chemin de fichier collé (« Copier en tant que chemin » de l'Explorateur met des guillemets). */
@@ -210,6 +211,7 @@ function NewProject({ onCreated, onError }: { onCreated: (p: Project) => void; o
   const [length, setLength] = useState("medium");
   const [layout, setLayout] = useState<Layout>("auto");
   const [captions, setCaptions] = useState<Captions>("tiktok");
+  const [subs, setSubs] = useState(true);
   const [sending, setSending] = useState(false);
 
   const create = async (src: string) => {
@@ -217,7 +219,7 @@ function NewProject({ onCreated, onError }: { onCreated: (p: Project) => void; o
     setSending(true);
     try {
       const [min_len, max_len] = LENGTHS[length];
-      const r = await api.post<{ project: Project }>("/api/clip/projects", { source: isUrl(src) ? src.trim() : cleanPath(src), count: Number(count), min_len, max_len, layout, captions });
+      const r = await api.post<{ project: Project }>("/api/clip/projects", { source: isUrl(src) ? src.trim() : cleanPath(src), count: Number(count), min_len, max_len, layout, captions: subs ? captions : "none" });
       setSource("");
       onCreated(r.project);
     } catch (e) {
@@ -302,7 +304,13 @@ function NewProject({ onCreated, onError }: { onCreated: (p: Project) => void; o
           <Segmented size="sm" value={layout} onChange={setLayout} options={(["auto", "stream", "chat", "face", "fit"] as Layout[]).map((v) => ({ value: v, label: LAYOUT_LABEL[v] }))} />
         </Opt>
         <Opt label="Sous-titres">
-          <Segmented size="sm" value={captions} onChange={setCaptions} options={(Object.keys(CAPTION_LABEL) as Captions[]).map((v) => ({ value: v, label: CAPTION_LABEL[v] }))} />
+          <div className="row" style={{ gap: 10 }}>
+            <label className="row clip-check">
+              <Switch checked={subs} onChange={setSubs} />
+              <span>{subs ? "Oui" : "Non"}</span>
+            </label>
+            {subs && <Segmented size="sm" value={captions} onChange={setCaptions} options={CAPTION_STYLES} />}
+          </div>
         </Opt>
       </div>
     </div>
@@ -557,7 +565,16 @@ function ClipCard({ project, clip, rank, onChange }: { project: Project; clip: C
               })
             }
           />
-          <Select value={clip.captions} options={(Object.keys(CAPTION_LABEL) as Captions[]).map((v) => ({ value: v, label: CAPTION_LABEL[v] }))} onChange={(v) => patch({ captions: v })} />
+        </div>
+        <div className="row" style={{ gap: 8, marginTop: 8 }}>
+          <label className="row clip-check">
+            <Switch
+              checked={clip.captions !== "none"}
+              onChange={(on) => patch({ captions: on ? (project.options.captions !== "none" ? project.options.captions : "tiktok") : "none" })}
+            />
+            <span>Sous-titres</span>
+          </label>
+          {clip.captions !== "none" && <Select value={clip.captions} options={CAPTION_STYLES} onChange={(v) => patch({ captions: v })} />}
         </div>
         <div className="row" style={{ gap: 8, marginTop: 10 }}>
           {clip.stale || !clip.file ? (

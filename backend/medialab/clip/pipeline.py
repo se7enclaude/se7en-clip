@@ -271,7 +271,7 @@ def render_one(pid: str, cid: str, settings, cancel: threading.Event, progress: 
         messages = json.loads(f.read_text("utf-8")) if f.exists() else []
     res = render.render(src, project["video"], clip, words, dst, cancel, progress,
                         use_gpu=bool(getattr(settings.tools, "use_gpu_encoder", True)), messages=messages)
-    render.write_caption_file(dst, clip)
+    dst.with_suffix(".txt").unlink(missing_ok=True)  # ancien fichier texte (avant 0.4.2)
     project = P.load(pid)
     for c in project["clips"]:
         if c["id"] == cid:
