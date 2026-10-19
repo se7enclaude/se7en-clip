@@ -83,11 +83,13 @@ class ClipJudge:
 
 def _clean_tags(tags: list) -> list[str]:
     out = []
-    for t in tags or []:
-        t = re.sub(r"[^\w#]", "", str(t).replace(" ", ""))
+    # l'IA colle parfois plusieurs hashtags dans un seul (« #TikTok#Meme ») : on les sépare
+    words = [w for t in tags or [] for w in re.split(r"(?=#)", str(t).replace(" ", ""))]
+    for t in words:
+        t = re.sub(r"[^\w]", "", t)
         if not t:
             continue
-        t = t if t.startswith("#") else "#" + t
+        t = "#" + t
         if t.lower() not in (x.lower() for x in out):
             out.append(t)
     return out[:5]

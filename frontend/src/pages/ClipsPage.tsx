@@ -119,6 +119,11 @@ function usePatreonLogin() {
 const CAPTION_LABEL: Record<Captions, string> = { tiktok: "TikTok", hormozi: "Hormozi", neon: "Néon", clean: "Sobre", none: "Aucun" };
 
 const isUrl = (s: string) => /^https?:\/\//i.test(s.trim());
+/** Un chemin de fichier collé (« Copier en tant que chemin » de l'Explorateur met des guillemets). */
+const cleanPath = (s: string) => s.trim().replace(/^"(.*)"$/, "$1");
+const isPath = (s: string) => /^([A-Za-z]:\\|\\\\)[^<>|*?]+\.\w{2,5}$/.test(cleanPath(s));
+const isSource = (s: string) => isUrl(s) || isPath(s);
+const fileName = (s: string) => cleanPath(s).split(/[\\/]/).pop() ?? s;
 const busy = (p: { status: string }) => p.status === "queued" || p.status === "analyzing";
 
 function eta(sec: number | null | undefined) {
@@ -147,10 +152,6 @@ export function ClipsPage() {
     });
   }, [refresh]);
 
-  const pending = useApp((s) => s.pendingUrls);
-  useEffect(() => {
-    if (pending?.length) useApp.getState().consumeUrls();
-  }, [pending]);
 
   if (openId) return <ProjectView id={openId} live={live[openId]} onBack={() => { setOpenId(null); refresh(); }} />;
 
@@ -216,7 +217,7 @@ function NewProject({ onCreated, onError }: { onCreated: (p: Project) => void; o
     setSending(true);
     try {
       const [min_len, max_len] = LENGTHS[length];
-      const r = await api.post<{ project: Project }>("/api/clip/projects", { source: src.trim(), count: Number(count), min_len, max_len, layout, captions });
+      const r = await api.post<{ project: Project }>("/api/clip/projects", { source: isUrl(src) ? src.trim() : cleanPath(src), count: Number(count), min_len, max_len, layout, captions });
       setSource("");
       onCreated(r.project);
     } catch (e) {
@@ -230,27 +231,42 @@ function NewProject({ onCreated, onError }: { onCreated: (p: Project) => void; o
     page: "clips",
     kind: "av",
     onFiles: (fs) => {
-      const v = fs.find((f) => f.kind === "video");
-      if (v) create(v.path);
+      const vids = fs.filter((f) => f.kind === "video");
+      if (vids.length === 1) setSource(vids[0].path); // on garde le choix des options avant de lancer
+      else vids.forEach((v) => create(v.path)); // plusieurs vidéos : un projet chacune, tout de suite
     },
   });
+
+  // un lien glissé depuis le navigateur arrive dans le champ
+  const pending = useApp((s) => s.pendingUrls);
+  useEffect(() => {
+    const u = pending?.length ? useApp.getState().consumeUrls() : null;
+    if (u?.length) setSource(u[0]);
+  }, [pending]);
+  const local = isPath(source);
+  const [typing, setTyping] = useState(false);
 
   return (
     <div className="clip-hero card rise">
       <Ticks inset={12} />
       <input {...intake.inputProps} />
       <div className="clip-hero-input">
-        <Link2 size={18} className="faint" />
+        {local ? <Clapperboard size={18} className="accent-text" /> : <Link2 size={18} className="faint" />}
         <input
           className="clip-url"
-          placeholder="Collez un lien (Twitch, YouTube, Kick…) ou glissez une vidéo ici"
-          value={source}
+          placeholder="Collez un lien (Twitch, YouTube, Kick, Patreon…) ou un fichier"
+          value={local && !typing ? fileName(source) : source}
+          title={local ? cleanPath(source) : undefined}
           onChange={(e) => setSource(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && isUrl(source) && create(source)}
+          onFocus={(e) => { setTyping(true); if (local) e.target.select(); }}
+          onBlur={() => setTyping(false)}
+          onKeyDown={(e) => e.key === "Enter" && isSource(source) && create(source)}
           spellCheck={false}
         />
-        <Button variant="ghost" icon={<Upload size={15} />} onClick={intake.pick}>Fichier</Button>
-        <Button variant="primary" icon={<WandSparkles size={16} />} loading={sending} disabled={!isUrl(source)} onClick={() => create(source)}>
+        <Button variant={local ? "ghost" : "outline"} icon={<Upload size={15} />} onClick={intake.pick}>
+          {local ? "Changer" : "Choisir une vidéo"}
+        </Button>
+        <Button variant="primary" icon={<WandSparkles size={16} />} loading={sending} disabled={!isSource(source)} onClick={() => create(source)}>
           Trouver les clips
         </Button>
       </div>

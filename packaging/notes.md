@@ -1,8 +1,10 @@
-## se7en Clip 0.4.0
+## se7en Clip 0.4.1
 
-- **Cam du streamer bien cadrée.** La détection automatique reconnaît la facecam même quand d'autres visages passent à l'écran (film, jeu, invités) : le streamer est en haut du clip, en entier et centré.
-- **Plus de sauts en bas.** Le jeu ou le film reste fixe sous la cam, sans les bandes noires, sur un fond flouté (fini le cadre qui saute d'un visage à l'autre).
-- **Sous-titres plus petits et lisibles** : ils tiennent toujours dans l'écran.
-- **« Détecter la cam »** dans *Régler le cadrage* : pour corriger d'un clic les projets déjà faits, puis « Appliquer à tous les clips ».
+- **Vos propres vidéos, pas seulement des liens.** Cliquez sur « Choisir une vidéo », glissez un fichier dans la fenêtre, ou collez son chemin (clic droit › « Copier en tant que chemin » dans l'Explorateur). Le nom du fichier s'affiche : réglez les options puis « Trouver les clips ».
+- Plusieurs vidéos glissées d'un coup : un projet chacune, lancé tout de suite.
+- Un lien glissé depuis le navigateur arrive directement dans le champ.
+- Hashtags mieux séparés.
+
+Toujours valable : cam du streamer bien cadrée, bas stable, sous-titres lisibles (0.4.0).
 
 Installez ou mettez à jour depuis **Seventh OS** ; l'appli propose aussi la mise à jour toute seule.
