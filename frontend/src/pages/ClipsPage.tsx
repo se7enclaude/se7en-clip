@@ -259,7 +259,7 @@ function NewProject({ onCreated, onError }: { onCreated: (p: Project) => void; o
           <KeyRound size={14} />
           {patreon.connected ? (
             <>
-              <span>Connecté à Patreon : les vidéos réservées aux membres sont accessibles.</span>
+              <span>Connecté à Patreon : les vidéos réservées aux membres sont accessibles. La connexion est gardée et renouvelée toute seule.</span>
               <Button size="sm" variant="ghost" onClick={patreon.logout}>Se déconnecter</Button>
             </>
           ) : (

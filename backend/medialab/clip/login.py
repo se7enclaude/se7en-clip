@@ -211,6 +211,37 @@ def open_window(site_id: str, settings_store) -> dict:
     return {"opened": True}
 
 
+def refresh(site_id: str, timeout: float = 25.0) -> bool:
+    """Renouvelle la session sans rien demander : une fenêtre invisible ouvre le site avec le profil de l'appli
+    (toujours connecté), puis ses cookies frais remplacent les anciens (anti-robot renouvelé, changement
+    d'adresse IP…). Retourne vrai si la session est toujours ouverte. Sans fenêtre d'appli : rien à faire."""
+    from .. import system
+    if system.window is None or site_id not in SITES:
+        return False
+    import webview
+    site = SITES[site_id]
+    loaded = threading.Event()
+    win = webview.create_window(f"{site['name']} — se7en Clip", f"https://www.{site['domain']}/home", hidden=True,
+                                width=900, height=700)
+    win.events.loaded += loaded.set
+    ok = False
+    try:
+        if not loaded.wait(timeout):
+            log.info("Session refresh for %s: page did not load", site["name"])
+            return False
+        time.sleep(3)  # l'anti-robot et le site posent leurs cookies juste après le chargement
+        ok = save_cookies(site_id, win.get_cookies())
+        log.info("Session refresh for %s: %s", site["name"], "renewed" if ok else "not signed in any more")
+    except Exception as e:
+        log.info("Session refresh for %s failed: %s", site["name"], e)
+    finally:
+        try:
+            win.destroy()
+        except Exception:
+            pass
+    return ok
+
+
 def logout(site_id: str) -> None:
     site = SITES[site_id]
     keep = [ln for ln in _stored_lines() if not ln.split("\t")[0].lstrip(".").endswith(site["domain"])]

@@ -193,6 +193,11 @@ def register(app: FastAPI, S) -> None:
         from . import login
         return await run_in_threadpool(login.open_window, site, S.settings)
 
+    @app.post("/api/clip/login/{site}/refresh")
+    async def clip_login_refresh(site: str):
+        from . import login
+        return {"ok": await run_in_threadpool(login.refresh, site)}
+
     @app.delete("/api/clip/login/{site}")
     async def clip_logout(site: str):
         from . import login

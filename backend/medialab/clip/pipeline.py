@@ -70,6 +70,11 @@ def _download(project: dict, settings, jctx, st: Stepper) -> Path:
             "embed_thumbnail": False, "write_subtitles": False}
     from . import login
     site = login.site_for(url)
+    connected = bool(site and login.status().get(site))
+    if connected:
+        # la connexion se garde toute seule : session renouvelée en arrière-plan avant chaque téléchargement
+        st.report(0.0, f"Connexion à {login.SITES[site]['name']}")
+        login.refresh(site)
     if site and settings.privacy.cookies_mode == "file":
         # session ouverte dans « Se connecter à … » : Cloudflare refuse (« Forbidden ») si le téléchargement ne se
         # présente pas comme le même navigateur, avec l'empreinte réseau de Chrome
@@ -83,6 +88,11 @@ def _download(project: dict, settings, jctx, st: Stepper) -> Path:
     try:
         res = attempt(settings)
     except MediaLabError as e:
+        if connected and e.code in ("members_only", "login_required", "private"):
+            name = login.SITES[site]["name"]
+            raise MediaLabError("login_required", f"{name} ne reconnaît plus la connexion de se7en Clip.",
+                                f"Reconnectez-vous une fois avec « Se connecter à {name} » (le compte doit avoir "
+                                "accès à ce post).", True, e.detail) from e
         text = f"{e.message} {e.detail or ''}".lower()
         if settings.privacy.cookies_mode != "browser" or not ("cookie" in text and ("copy" in text or "decrypt" in text)):
             raise
