@@ -32,23 +32,30 @@ SAMPLE_W = 640
 Box = tuple[float, float, float, float]  # x, y, w, h en fractions de l'image
 
 
+DETECT_VERSION = 2  # les détections plus anciennes (layout.json en cache) sont refaites
+
+
 @dataclass
 class Layout:
     mode: str  # stream | chat | face | fit
     cam: Box | None = None  # la facecam (modes stream et chat)
     confidence: float = 0.0
+    content: Box | None = None  # l'image du jeu / du film, sans bandes noires (mode stream)
 
     def to_dict(self) -> dict:
-        return {"mode": self.mode, "cam": list(self.cam) if self.cam else None, "confidence": round(self.confidence, 2)}
+        return {"mode": self.mode, "cam": list(self.cam) if self.cam else None, "confidence": round(self.confidence, 2),
+                "content": list(self.content) if self.content else None, "v": DETECT_VERSION}
 
     @staticmethod
     def from_dict(d: dict | None) -> "Layout":
         d = d or {}
         cam = d.get("cam")
+        content = d.get("content")
         mode = d.get("mode") or "fit"
         if mode == "discord":  # ancien cadrage (0.2.0) : devenu « cam + jeu »
             mode = "stream"
-        return Layout(mode, clamp_box(cam) if cam else None, float(d.get("confidence") or 0))
+        return Layout(mode, clamp_box(cam) if cam else None, float(d.get("confidence") or 0),
+                      clamp_box(content) if content else None)
 
 
 def clamp_box(b) -> Box:
@@ -94,37 +101,124 @@ def frame_at(src: Path, t: float, src_w: int, src_h: int) -> np.ndarray | None:
 
 
 # ------------------------------------------------------------------ détection de la mise en page
+Face = tuple[float, float, float, float]  # cx, cy, w, h (fractions)
+
+
 def detect_layout(src: Path, duration: float, src_w: int, src_h: int, cancel: threading.Event | None = None,
                   samples: int = 28) -> Layout:
-    """Regarde ~30 images réparties dans la vidéo pour choisir la mise en page."""
+    """Regarde ~30 images réparties dans la vidéo pour choisir la mise en page.
+
+    Une facecam, c'est un visage qui revient au même endroit, hors du centre, sur une bonne partie des images —
+    même quand d'autres visages (film, jeu, invités) passent ailleurs à l'écran."""
     if src_h >= src_w * 1.3:
         return Layout("fit", None, 1.0)  # déjà vertical
-    found: list[tuple[float, float, float, float]] = []  # cx, cy, w, h (fractions)
-    times = [duration * (0.05 + 0.9 * k / max(1, samples - 1)) for k in range(samples)]
-    for t in times:
+    imgs: list[np.ndarray] = []
+    faces: list[list[Face]] = []
+    for k in range(samples):
         if cancel is not None and cancel.is_set():
             raise Canceled()
-        img = frame_at(src, t, src_w, src_h)
+        img = frame_at(src, duration * (0.05 + 0.9 * k / max(1, samples - 1)), src_w, src_h)
         if img is None:
             continue
-        faces = F.detect(img, threshold=0.7)
-        if not faces:
-            continue
         fh, fw = img.shape[:2]
-        x1, y1, x2, y2 = max(faces, key=lambda f: (f.box[2] - f.box[0]) * (f.box[3] - f.box[1])).box
-        found.append(((x1 + x2) / 2 / fw, (y1 + y2) / 2 / fh, (x2 - x1) / fw, (y2 - y1) / fh))
-    ratio = len(found) / max(1, samples)
+        imgs.append(img)
+        faces.append([((f.box[0] + f.box[2]) / 2 / fw, (f.box[1] + f.box[3]) / 2 / fh,
+                       (f.box[2] - f.box[0]) / fw, (f.box[3] - f.box[1]) / fh) for f in F.detect(img, threshold=0.65)])
+    n = len(imgs)
+    if not n:
+        return Layout("fit", None, 0.0)
+    cam_face, support = _steady_face(faces)
+    if cam_face and support / n >= 0.3:
+        cx, cy, fw, fh = cam_face
+        off_center = abs(cx - 0.5) > 0.15 or abs(cy - 0.5) > 0.15
+        if fh < 0.25 and off_center:
+            gray = np.stack([i.mean(axis=2) for i in imgs]).astype(np.float32)
+            cam = _cam_rect(gray, cam_face) or cam_box(cx, cy, fw, fh, src_w / src_h)
+            return Layout("stream", cam, min(1.0, support / n + 0.2), _content_box(gray, cam))
+    ratio = sum(1 for f in faces if f) / n
     if ratio < 0.35:
         return Layout("fit", None, 1 - ratio)
-    cx = statistics.median(f[0] for f in found)
-    cy = statistics.median(f[1] for f in found)
-    fw = statistics.median(f[2] for f in found)
-    fh = statistics.median(f[3] for f in found)
-    spread = max(statistics.pstdev([f[0] for f in found]), statistics.pstdev([f[1] for f in found]))
-    off_center = abs(cx - 0.5) > 0.18 or abs(cy - 0.5) > 0.18
-    if fh < 0.22 and spread < 0.06 and off_center:
-        return Layout("stream", cam_box(cx, cy, fw, fh, src_w / src_h), min(1.0, ratio * (1 - spread * 5)))
     return Layout("face", None, ratio)
+
+
+def _steady_face(faces: list[list[Face]]) -> tuple[Face | None, int]:
+    """Le visage qui revient le plus souvent au même endroit (et le nombre d'images où on le voit)."""
+    def near(a: Face, b: Face) -> bool:
+        return abs(a[0] - b[0]) < 0.05 and abs(a[1] - b[1]) < 0.07 and 0.6 < a[3] / max(b[3], 1e-6) < 1.6
+
+    best: tuple[Face | None, int] = (None, 0)
+    for frame in faces:
+        for c in frame:
+            support = sum(1 for other in faces if any(near(o, c) for o in other))
+            if support > best[1]:
+                best = (c, support)
+    if best[0] is None:
+        return best
+    members = [o for other in faces for o in other if near(o, best[0])]
+    med = tuple(statistics.median(m[i] for m in members) for i in range(4))
+    return med, best[1]  # type: ignore[return-value]
+
+
+def _edge(moving: np.ndarray, start: int, step: int, need: int) -> int:
+    """Depuis le visage (``start``), avance de ``step`` : on traverse la personne (elle bouge), puis le décor
+    de la pièce (immobile), et on s'arrête à la première série de ``need`` cases qui bougent après ce décor
+    — le jeu ou le film. Retourne l'indice où elles commencent, ou le bord de l'image (-1 / len)."""
+    i, run, n, still = start, 0, len(moving), 0
+    while 0 <= i < n:
+        if moving[i]:
+            run += 1
+            if still >= need and run >= need:
+                return i - step * (need - 1)
+        else:
+            run = 0
+            still += 1
+        i += step
+    return -1 if step < 0 else n
+
+
+def _cam_rect(gray: np.ndarray, face: Face) -> Box | None:
+    """Rectangle de la facecam : autour du visage, la pièce du streamer bouge peu d'une image à l'autre,
+    alors que le jeu ou le film change complètement. On part du visage et on s'arrête là où l'image « bouge »."""
+    _, h, w = gray.shape
+    moving = gray.std(axis=0) > 28.0
+    cx, cy, fw, fh = face
+    px, py = int(cx * w), int(cy * h)
+    r0, r1 = max(0, int((cy - fh) * h)), min(h, int((cy + fh) * h) + 1)
+    cols = moving[r0:r1].mean(axis=0) > 0.8  # le jeu / film bouge partout, la personne seulement par endroits
+    need_x, need_y = max(3, w // 100), max(3, h // 100)
+    left = _edge(cols, px, -1, need_x) + 1
+    right = _edge(cols, px, 1, need_x)
+    rows = moving[:, left:right].mean(axis=1) > 0.8
+    top = _edge(rows, py, -1, need_y) + 1
+    bottom = _edge(rows, py, 1, need_y)
+    bw, bh = (right - left) / w, (bottom - top) / h
+    # trop grand (jeu figé, plan fixe) ou trop petit : on garde l'estimation autour du visage
+    if not (fw * 1.6 < bw < 0.6 and fh * 1.8 < bh < 0.7):
+        log.info("Facecam edges not found (%.2f x %.2f): estimated around the face", bw, bh)
+        return None
+
+    def snap(v: float) -> float:
+        return 0.0 if v < 0.02 else (1.0 if v > 0.98 else v)
+
+    x0, x1, y0, y1 = snap(left / w), snap(right / w), snap(top / h), snap(bottom / h)
+    return clamp_box((x0, y0, x1 - x0, y1 - y0))
+
+
+def _content_box(gray: np.ndarray, cam: Box | None) -> Box | None:
+    """La zone utile (jeu, film) : sans les bandes noires ni la facecam."""
+    _, h, w = gray.shape
+    alive = (gray.max(axis=0) > 24) & (gray.std(axis=0) > 6)
+    if cam:
+        x, y, cw, ch = cam
+        alive[int(y * h):int((y + ch) * h) + 1, int(x * w):int((x + cw) * w) + 1] = False
+    rows = np.where(alive.mean(axis=1) > 0.25)[0]
+    cols = np.where(alive.mean(axis=0) > 0.25)[0]
+    if len(rows) < h * 0.2 or len(cols) < w * 0.2:
+        return None
+    box = (cols[0] / w, rows[0] / h, (cols[-1] + 1 - cols[0]) / w, (rows[-1] + 1 - rows[0]) / h)
+    if box[2] > 0.97 and box[3] > 0.97:
+        return None  # toute l'image
+    return clamp_box(box)
 
 
 def cam_box(cx: float, cy: float, fw: float, fh: float, aspect: float) -> tuple[float, float, float, float]:
@@ -193,6 +287,24 @@ def _cam_crop(cam: Box, src_w: int, src_h: int) -> tuple[int, str]:
     return top_h, f"crop={_even(ncw)}:{_even(nch)}:{_even(cx0)}:{_even(cy0)}"
 
 
+def _game_crop(layout: Layout, src_w: int, src_h: int, bot_aspect: float):
+    """Zone utile entière (pour le fond flouté) et partie montrée en bas : on coupe au plus 40 % de la largeur
+    (un film garde ses personnages) et on évite la facecam quand elle est posée sur l'image."""
+    bx, by, bw, bh = layout.content or (0.0, 0.0, 1.0, 1.0)
+    cx, cy, cw, ch = bx * src_w, by * src_h, bw * src_w, bh * src_h
+    gh = ch
+    gw = min(cw, gh * max(bot_aspect, cw / ch * 0.6))
+    gx = cx + (cw - gw) / 2
+    if layout.cam:
+        kx, ky, kw, kh = layout.cam[0] * src_w, layout.cam[1] * src_h, layout.cam[2] * src_w, layout.cam[3] * src_h
+        if ky < cy + gh and ky + kh > cy:  # la cam est posée sur l'image montrée : on se décale à côté
+            if kx + kw / 2 > src_w / 2 and gx + gw > kx:
+                gx = max(cx, kx - gw)
+            elif kx + kw / 2 <= src_w / 2 and gx < kx + kw:
+                gx = min(cx + cw - gw, kx + kw)
+    return (_even(cw), _even(ch), _even(cx), _even(cy)), (_even(gw), _even(gh), _even(gx), _even(cy))
+
+
 def filtergraph(layout: Layout, src_w: int, src_h: int, subtitles: bool, track_file: bool,
                 fps: float = 30.0, duration: float = 60.0) -> tuple[str, float]:
     """Graphe ``-filter_complex`` (sortie ``[v]``) et hauteur du haut de la zone de sous-titres (en %)."""
@@ -208,13 +320,14 @@ def filtergraph(layout: Layout, src_w: int, src_h: int, subtitles: bool, track_f
     if layout.mode == "stream" and layout.cam:
         top_h, cam_crop = _cam_crop(layout.cam, src_w, src_h)
         bot_h = OUT_H - top_h
-        gw, gh = src_h * OUT_W / bot_h, src_h
-        if gw > src_w:
-            gw, gh = src_w, src_w * bot_h / OUT_W
-        gx, gy = (src_w - gw) / 2, (src_h - gh) / 2
-        graph = (f"[0:v]split=2[a][b];"
+        (cw, ch, cx, cy), (gw, gh, gx, gy) = _game_crop(layout, src_w, src_h, OUT_W / bot_h)
+        # le jeu / film, recadré sans trop zoomer, sur un fond flouté de la même image
+        graph = (f"[0:v]split=3[a][b][c];"
                  f"[a]{cam_crop},scale={OUT_W}:{top_h}[top];"
-                 f"[b]crop={_even(gw)}:{_even(gh)}:{_even(gx)}:{_even(gy)},scale={OUT_W}:{bot_h}[bot];"
+                 f"[b]crop={cw}:{ch}:{cx}:{cy},scale={OUT_W}:{bot_h}:force_original_aspect_ratio=increase,"
+                 f"crop={OUT_W}:{bot_h},boxblur=24:2,eq=brightness=-0.12[bg];"
+                 f"[c]crop={gw}:{gh}:{gx}:{gy},scale={OUT_W}:-2[fg];"
+                 f"[bg][fg]overlay=0:(H-h)/2[bot];"
                  f"[top][bot]vstack=inputs=2,setsar=1{tail}")
         return graph, round(top_h / OUT_H * 100 + 3, 1)
     if layout.mode == "face" and src_w > src_h:

@@ -207,8 +207,9 @@ def analyze(pid: str, settings, jctx, progress: Progress, render_clips: bool = T
     st.step("layout", "Analyse de l'image (visages, facecam)")
     layout_file = cache / "layout.json"
     forced = opts.get("layout") or "auto"
-    if layout_file.exists():
-        layout = reframe.Layout.from_dict(json.loads(layout_file.read_text("utf-8")))
+    cached = json.loads(layout_file.read_text("utf-8")) if layout_file.exists() else {}
+    if cached.get("v", 1) >= reframe.DETECT_VERSION:
+        layout = reframe.Layout.from_dict(cached)
     else:
         layout = reframe.detect_layout(src, float(video["duration"]), int(video["width"]), int(video["height"]), cancel)
         layout_file.write_text(json.dumps(layout.to_dict()), "utf-8")
@@ -243,7 +244,7 @@ def forced_layout(mode: str, detected: reframe.Layout) -> reframe.Layout:
     cam = detected.cam if mode in ("stream", "chat") else None
     if mode in ("stream", "chat") and not cam:
         cam = (0.0, 0.0, 0.3, 0.3)  # à ajuster dans « Régler le cadrage »
-    return reframe.Layout(mode, cam, 1.0)
+    return reframe.Layout(mode, cam, 1.0, detected.content)
 
 
 def render_one(pid: str, cid: str, settings, cancel: threading.Event, progress: Callable[[float, str], None],

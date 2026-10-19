@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { mediaUrl } from "../api/client";
+import { WandSparkles } from "lucide-react";
+import { api, mediaUrl } from "../api/client";
 import { Button, Modal, Segmented } from "./ui";
 
 export type Box = [number, number, number, number]; // x, y, w, h en fractions de l'image
@@ -88,6 +89,18 @@ export function LayoutEditor({
   const [at, setAt] = useState(initial.at);
   const [shown, setShown] = useState(initial.at);
   const [saving, setSaving] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+
+  const detect = async () => {
+    setDetecting(true);
+    try {
+      const d = await api.post<{ mode: Mode; cam: Box | null }>(`/api/clip/projects/${projectId}/detect-layout`);
+      setMode(d.mode);
+      if (d.cam) setCam(d.cam);
+    } finally {
+      setDetecting(false);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -115,6 +128,8 @@ export function LayoutEditor({
       width={860}
       actions={
         <>
+          <Button icon={<WandSparkles size={15} />} loading={detecting} onClick={detect}>Détecter la cam</Button>
+          <span className="spacer" />
           <Button onClick={onClose}>Annuler</Button>
           <Button variant="primary" loading={saving} onClick={save}>Appliquer à tous les clips</Button>
         </>

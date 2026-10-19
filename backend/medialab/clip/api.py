@@ -220,13 +220,31 @@ def register(app: FastAPI, S) -> None:
             await run_in_threadpool(ffmpeg.extract_frame, src, at, out)
         return FileResponse(out, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
+    @app.post("/api/clip/projects/{pid}/detect-layout")
+    async def clip_detect_layout(pid: str):
+        """Refait la détection de la mise en page (facecam, zone du jeu) ; appliquée ensuite par PUT layout."""
+        import json
+        from .reframe import detect_layout
+        project = P.load(pid)
+        video = project.get("video") or {}
+        src = Path(project["source"].get("path") or "")
+        if not src.is_file():
+            raise MediaLabError("source_missing", "La vidéo source de ce projet n'existe plus.")
+        layout = await run_in_threadpool(detect_layout, src, float(video.get("duration") or 0),
+                                         int(video.get("width") or 1920), int(video.get("height") or 1080))
+        (P.cache_dir(pid) / "layout.json").write_text(json.dumps(layout.to_dict()), "utf-8")
+        P.patch(pid, {"layout": layout.to_dict()})
+        return layout.to_dict()
+
     @app.put("/api/clip/projects/{pid}/layout")
     async def clip_layout(pid: str, body: LayoutBody):
         from .reframe import Layout, clamp_box
         if body.mode not in ("stream", "chat", "face", "fit"):
             raise MediaLabError("invalid", "Cadrage inconnu.")
-        layout = Layout(body.mode, clamp_box(body.cam) if body.cam else None, 1.0).to_dict()
         project = P.load(pid)
+        content = (project.get("layout") or {}).get("content")  # la zone du jeu / film détectée reste la même
+        layout = Layout(body.mode, clamp_box(body.cam) if body.cam else None, 1.0,
+                        clamp_box(content) if content else None).to_dict()
         project["layout"] = layout
         if body.apply_all:
             for c in project["clips"]:

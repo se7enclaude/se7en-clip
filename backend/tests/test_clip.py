@@ -127,6 +127,24 @@ def test_filtergraphs():
     assert "boxblur" in g and g.endswith("[v]")
 
 
+def test_stream_bottom_avoids_cam_and_black_bars():
+    lay = reframe.Layout("stream", (0.75, 0.0, 0.25, 0.26), 1.0, (0.0, 0.13, 1.0, 0.74))
+    _, (gw, gh, gx, gy) = reframe._game_crop(lay, 1920, 1080, 1080 / 1360)
+    assert gy == 140 and gh == 798  # sans les bandes noires
+    assert gx + gw <= 1440  # à côté de la cam
+    assert gw >= 0.55 * 1920  # le film n'est pas trop zoomé
+
+
+def test_cam_rect_found_around_a_moving_streamer():
+    import numpy as np
+    rng = np.random.default_rng(1)
+    gray = rng.uniform(0, 255, (28, 90, 160)).astype(np.float32)  # le film change d'une image à l'autre
+    gray[:, 0:24, 120:160] = 40.0  # la pièce du streamer, immobile (en haut à droite)
+    gray[:, 6:20, 132:146] = rng.uniform(80, 200, (28, 14, 14))  # le streamer bouge
+    x, y, w, h = reframe._cam_rect(gray, (139 / 160, 12 / 90, 0.05, 0.08))
+    assert abs(x - 0.75) < 0.02 and y == 0.0 and abs(w - 0.25) < 0.02 and abs(h - 24 / 90) < 0.03
+
+
 
 
 
