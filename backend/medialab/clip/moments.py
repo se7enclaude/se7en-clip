@@ -161,9 +161,10 @@ def _window_score(interest: np.ndarray, start: float, end: float) -> tuple[float
 
 
 def candidates(sents: list[Sentence], sig: dict, min_len: float = 20.0, max_len: float = 75.0,
-               ideal: float = 40.0, keep: int = 40) -> list[Candidate]:
+               ideal: float | None = None, keep: int = 40) -> list[Candidate]:
     """Meilleure fenêtre de phrases pour chaque phrase de départ, puis les ``keep`` meilleures sans chevauchement."""
     interest = sig["interest"]
+    ideal = ideal or min(max_len, max(min_len, (min_len + max_len) / 2, 40.0))
     pool: list[Candidate] = []
     for i, s in enumerate(sents):
         best: Candidate | None = None
@@ -178,7 +179,12 @@ def candidates(sents: list[Sentence], sig: dict, min_len: float = 20.0, max_len:
             # préférence douce pour une durée proche de l'idéal, et pour une fin de phrase franche
             fit = 1.0 - min(1.0, abs(dur - ideal) / ideal) * 0.25
             clean_end = 1.0 if END_PUNCT.search(sents[j].text) else 0.92
-            score = (0.75 * peak + 0.25 * hook) * fit * clean_end
+            # un clip finit peu après son moment fort : une longue traîne après le pic le rend mou
+            a = int(start)
+            seg = interest[a:max(a + 1, int(np.ceil(end)))]
+            tail = end - (a + int(np.argmax(seg))) if len(seg) else 0.0
+            tail_ok = 1.0 - 0.3 * min(1.0, max(0.0, tail - 12.0) / 25.0)
+            score = (0.75 * peak + 0.25 * hook) * fit * clean_end * tail_ok
             if best is None or score > best.prescore:
                 reasons = []
                 if hook > 0.35:

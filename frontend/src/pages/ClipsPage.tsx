@@ -70,7 +70,7 @@ interface Live {
   eta: number | null;
 }
 
-const LENGTHS: Record<string, [number, number]> = { short: [15, 35], medium: [20, 60], long: [45, 90] };
+const LENGTHS: Record<string, [number, number]> = { short: [15, 35], medium: [20, 60], long: [45, 90], minute: [61, 100] };
 const STEPS: { id: string; label: string }[] = [
   { id: "download", label: "Téléchargement" },
   { id: "audio", label: "Son" },
@@ -298,7 +298,7 @@ function NewProject({ onCreated, onError }: { onCreated: (p: Project) => void; o
           />
         </Opt>
         <Opt label="Durée">
-          <Segmented size="sm" value={length} onChange={setLength} options={[{ value: "short", label: "15–35 s" }, { value: "medium", label: "20–60 s" }, { value: "long", label: "45–90 s" }]} />
+          <Segmented size="sm" value={length} onChange={setLength} options={[{ value: "short", label: "15–35 s" }, { value: "medium", label: "20–60 s" }, { value: "long", label: "45–90 s" }, { value: "minute", label: "+1 min", tip: "61 s à 1 min 40 : au-dessus d'une minute, comme le demande la monétisation TikTok" }]} />
         </Opt>
         <Opt label="Cadrage">
           <Segmented size="sm" value={layout} onChange={setLayout} options={(["auto", "stream", "chat", "face", "fit"] as Layout[]).map((v) => ({ value: v, label: LAYOUT_LABEL[v] }))} />

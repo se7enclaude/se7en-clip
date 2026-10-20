@@ -25,6 +25,9 @@ from . import reframe, render, scoring
 log = get_logger("clip")
 Progress = Callable[[float, str, float | None], None]
 
+MIN_SCORE = 55  # sous cette note, un moment n'est pas clippé (sauf pour garder au moins 3 clips)
+
+
 def auto_count(duration: float) -> int:
     """Nombre de clips proportionnel à la durée : environ un clip toutes les 4 minutes (3 à 30)."""
     return max(3, min(30, round(duration / 240)))
@@ -186,8 +189,8 @@ def analyze(pid: str, settings, jctx, progress: Progress, render_clips: bool = T
     sents = M.sentences(words)
     count = int(opts.get("count") or 0) or auto_count(float(video["duration"] or 0))  # 0 = automatique
     count = max(1, min(50, count))
-    cands = M.candidates(sents, sig, float(opts.get("min_len") or 20), float(opts.get("max_len") or 75),
-                         keep=max(12, min(60, count * 4)))
+    min_len, max_len = float(opts.get("min_len") or 20), float(opts.get("max_len") or 75)
+    cands = M.candidates(sents, sig, min_len, max_len, keep=max(12, min(60, count * 4)))
     if not cands:
         raise MediaLabError("no_moments", "Pas assez de paroles pour faire des clips.",
                             "Essayez une durée minimale plus courte.")
@@ -198,10 +201,18 @@ def analyze(pid: str, settings, jctx, progress: Progress, render_clips: bool = T
     judged, note = scoring.judge(
         sents, cands, context, cancel, lambda f, lbl: st.report(f, f"L'IA choisit les meilleurs moments · {lbl}"),
         lambda d, t: st.report(0.0, f"Téléchargement de l'IA de texte · {d * 100 // max(t, 1)} %"),
-        use_ai=bool(opts.get("use_ai", True)))
+        use_ai=bool(opts.get("use_ai", True)), min_len=min_len, max_len=max_len)
     if note:
         notes.append(note)
-    best = scoring.pick(judged, count)
+    with_ai = any(m.get("ai") for m in judged)
+    best = scoring.pick(judged, count, MIN_SCORE if with_ai else 0)
+    if with_ai and len(best) < count:
+        notes.append(f"{len(best)} moments vraiment forts trouvés (sur {count} demandés) : "
+                     "se7en Clip ne fait pas de clip juste pour remplir.")
+    if with_ai and best:
+        st.report(0.9, "L'IA écrit les titres")
+        scoring.retitle(sents, best, context, messages, cancel,
+                        lambda f, lbl: st.report(0.9 + 0.1 * f, f"L'IA écrit les titres · {lbl}"))
 
     # 5. mise en page
     st.step("layout", "Analyse de l'image (visages, facecam)")

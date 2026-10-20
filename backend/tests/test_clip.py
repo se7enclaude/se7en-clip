@@ -201,3 +201,19 @@ def test_title_is_tidied_for_file_names():
     from medialab.clip.scoring import tidy_title
     assert tidy_title("TomBradyDemandeUneSignature") == "Tom Brady Demande Une Signature"
     assert tidy_title("« Le streamer rit. »") == "Le streamer rit"
+
+
+def test_weak_moments_are_not_clipped():
+    ms = [{"start": i * 100.0, "end": i * 100.0 + 30, "score": sc} for i, sc in enumerate([90, 80, 50, 40, 70])]
+    assert [m["score"] for m in scoring.pick(ms, 5, 55)] == [90, 80, 70]
+    assert len(scoring.pick(ms[2:4], 5, 55)) == 2  # jamais vide : on garde quand même les meilleurs
+
+
+def test_ai_cannot_shorten_a_one_minute_clip():
+    words = [{"text": f"mot{i}.", "start": i * 5.0, "end": i * 5.0 + 4.0} for i in range(20)]
+    sents = M.sentences(words)
+    c = M.Candidate(0, len(sents) - 1, sents[0].start, sents[-1].end, 0.5)
+    ai = {"score": 80, "start": 2, "end": 6, "title": "x", "description": "", "hashtags": []}
+    m = scoring._merge(sents, c, ai, min_len=61)
+    assert m["end"] - m["start"] >= 61
+    assert scoring.tidy_title("Le streamer rit devant *Ted 2*") == "Le streamer rit devant Ted 2"
