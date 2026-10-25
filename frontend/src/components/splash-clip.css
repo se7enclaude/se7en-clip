@@ -1,0 +1,55 @@
+/* se7en Clip launch animation: the edit (see Splash.tsx). */
+.spk { --cyan: #22D3E6; position: fixed; inset: 0; z-index: 1000; overflow: hidden; cursor: pointer; color: #fff; font-family: "Manrope", system-ui, sans-serif;
+  background: radial-gradient(70% 60% at 50% 45%, #0d2226 0%, #071113 65%, #040808 100%); }
+
+/* film strip racing then braking */
+.spk-strip { position: absolute; left: 0; right: 0; top: 50%; height: 150px; margin-top: -75px; padding: 18px 0; background: #050909;
+  box-shadow: 0 0 0 1px rgba(34, 211, 230, .12); animation: spk-strip-out .4s 1.05s ease-in forwards; }
+.spk-strip::before, .spk-strip::after { content: ""; position: absolute; left: 0; right: 0; height: 8px; background: repeating-linear-gradient(90deg, rgba(255, 255, 255, .32) 0 10px, transparent 10px 24px); }
+.spk-strip::before { top: 5px; } .spk-strip::after { bottom: 5px; }
+.spk-track { position: absolute; top: 18px; bottom: 18px; left: 50%; display: flex; gap: 10px; transform: translateX(-160%); animation: spk-race .95s cubic-bezier(.12, .9, .2, 1) forwards; }
+.spk-frame { flex-shrink: 0; width: 202px; height: 114px; border-radius: 6px; background: linear-gradient(135deg, hsl(var(--h) 45% 38%), hsl(calc(var(--h) + 60) 50% 18%)); opacity: .85; }
+.spk-frame.hero { background: linear-gradient(135deg, #1aa3b3, #0a3a40); box-shadow: 0 0 0 2px var(--cyan); opacity: 1; }
+
+/* two blade strokes */
+.spk-cut { position: absolute; top: 50%; width: 3px; height: 0; margin-top: -110px; background: var(--cyan); box-shadow: 0 0 18px var(--cyan); border-radius: 2px; opacity: 0; }
+.spk-cut.a { left: calc(50% - 106px); animation: spk-cut .22s .82s ease-out forwards; }
+.spk-cut.b { left: calc(50% + 103px); animation: spk-cut .22s .92s ease-out forwards; }
+
+/* the cut frame becomes a vertical short */
+.spk-short { position: absolute; left: 50%; top: 50%; width: 202px; height: 114px; margin: -57px 0 0 -101px; border-radius: 6px; overflow: hidden; opacity: 0;
+  background: linear-gradient(160deg, #1aa3b3 0%, #0b4a52 55%, #062226 100%); box-shadow: 0 0 0 2px var(--cyan), 0 30px 80px rgba(0, 0, 0, .6);
+  animation: spk-lift .01s 1.02s forwards, spk-turn .55s 1.12s cubic-bezier(.22, 1, .36, 1) forwards; }
+.spk-short-in { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; opacity: 0; animation: spk-in .35s 1.55s forwards; }
+.spk-rec { position: absolute; top: 14px; left: 14px; display: inline-flex; align-items: center; gap: 6px; font: 700 11px/1 "Manrope", sans-serif; letter-spacing: .06em; }
+.spk-rec i { width: 7px; height: 7px; border-radius: 50%; background: #ff4d5a; animation: spk-pulse 1.2s ease-in-out infinite; }
+.spk-word { font: 400 64px/1 "Anton", Impact, sans-serif; letter-spacing: .01em; }
+.spk-word b { font-weight: 400; color: var(--cyan); }
+.spk-app { font: 400 22px/1 "Anton", Impact, sans-serif; letter-spacing: .5em; margin-left: .5em; color: rgba(255, 255, 255, .85); }
+.spk-progress { position: absolute; left: 14px; right: 14px; bottom: 16px; height: 3px; border-radius: 3px; background: rgba(255, 255, 255, .25); overflow: hidden; }
+.spk-progress i { display: block; height: 100%; width: 0; background: var(--cyan); animation: spk-play 2.4s 1.6s linear forwards; }
+
+.spk-tag { position: absolute; left: 0; right: 0; top: calc(50% + 230px); text-align: center; font: 500 14px/1.4 "Manrope", sans-serif; color: rgba(255, 255, 255, .6); opacity: 0; animation: spk-in .5s 1.85s forwards; }
+.spk-foot { position: absolute; left: 0; right: 0; bottom: 34px; display: flex; align-items: center; justify-content: center; gap: 14px; font: 600 10px/1 "Manrope", sans-serif; letter-spacing: .14em; text-transform: uppercase; color: rgba(255, 255, 255, .4); opacity: 0; animation: spk-in .4s .5s forwards; }
+.spk-bar { width: 120px; height: 2px; border-radius: 2px; background: rgba(255, 255, 255, .12); overflow: hidden; }
+.spk-bar > span { display: block; height: 100%; width: 30%; background: var(--cyan); animation: spk-scan 1.3s ease-in-out infinite alternate; transition: width .5s; }
+.spk-bar > span.full { width: 100%; animation: none; }
+
+/* exit: swiped up like the next short */
+.spk.leaving .spk-short { animation: spk-swipe .45s cubic-bezier(.55, 0, .45, 1) forwards; }
+.spk.leaving .spk-tag, .spk.leaving .spk-foot { animation: spk-out .2s forwards; }
+.spk.leaving { animation: spk-out .16s .38s forwards; }
+
+@keyframes spk-race { to { transform: translateX(-50%); } }
+@keyframes spk-strip-out { to { opacity: 0; transform: scaleY(.6); } }
+@keyframes spk-cut { 0% { opacity: 1; height: 0; } 100% { opacity: 0; height: 220px; } }
+@keyframes spk-lift { to { opacity: 1; } }
+@keyframes spk-turn { 0% { width: 202px; height: 114px; margin: -57px 0 0 -101px; border-radius: 6px; }
+  100% { width: 236px; height: 420px; margin: -230px 0 0 -118px; border-radius: 28px; } }
+@keyframes spk-play { to { width: 100%; } }
+@keyframes spk-pulse { 50% { opacity: .3; } }
+@keyframes spk-swipe { to { transform: translateY(-120vh) rotate(-4deg); } }
+@keyframes spk-in { to { opacity: 1; } }
+@keyframes spk-out { to { opacity: 0; } }
+@keyframes spk-scan { from { transform: translateX(-40%); } to { transform: translateX(260%); } }
+@media (prefers-reduced-motion: reduce) { .spk * { animation-duration: .01s !important; animation-delay: 0s !important; } }

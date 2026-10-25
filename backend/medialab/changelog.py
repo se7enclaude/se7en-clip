@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 CHANGES: dict[str, dict[str, list[str]]] = {
+    "0.5.1": {
+        "fr": ['Nouvelle animation de lancement : « le montage », une pellicule défile, une image est coupée et pivote en format vertical.'],
+        "en": ['New launch animation: a film strip races by, one frame is cut out and turns into a vertical short.'],
+    },
     "1.5.0": {
         "fr": ["Nouveau : « Analyser tout le site ». La page est ouverte dans un vrai navigateur (sans compte ni "
                "cookie) : les vidéos chargées par JavaScript, les lecteurs dans des cadres et les flux HLS sont "
