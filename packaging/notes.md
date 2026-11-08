@@ -1,6 +1,7 @@
-## se7en Clip 0.5.1
+## se7en Clip 0.5.2
 
-- **Nouvelle animation de lancement** : « le montage », une pellicule défile, une image est coupée et pivote en format vertical.
+- **Composants à jour, clairement** : chaque composant (FFmpeg, Deno, yt-dlp, Whisper, llama.cpp, Real-ESRGAN…) affiche « À jour (version X, vérifié le …) » ou « Mise à jour disponible ». Un composant à jour n'est plus jamais retéléchargé, et l'appli te prévient quand une nouvelle version sort.
+- **Corrigé** : une mise à jour de FFmpeg ou de Deno était téléchargée mais pas utilisée (le bouton retéléchargeait en boucle) ; un ancien yt-dlp pouvait masquer le plus récent.
 
 Tes projets et tes réglages sont gardés.
 
