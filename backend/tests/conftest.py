@@ -6,6 +6,7 @@ from pathlib import Path
 # Isolated data dir for the whole test session (must be set before importing medialab).
 _TMP = tempfile.mkdtemp(prefix="medialab-test-")
 os.environ["MEDIALAB_DATA_DIR"] = _TMP
+os.environ["SE7ENCLIP_DATA_DIR"] = _TMP  # le nom lu par config.paths() : sans lui, les tests écrivaient dans les vraies données
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest  # noqa: E402

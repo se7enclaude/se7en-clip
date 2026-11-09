@@ -107,8 +107,8 @@ def test_portable_swap_keeps_data_and_components(monkeypatch, tmp_path):
     monkeypatch.setattr(upd.subprocess, "Popen", lambda args, **kw: started.append(args))
     z = tmp_path / "p.zip"
     with zipfile.ZipFile(z, "w") as f:
-        f.writestr("se7en/se7en.exe", "new")
-        f.writestr("se7en/_internal/lib.dll", "new")
+        f.writestr("se7en Clip/se7en-clip.exe", "new")  # le programme de se7en Clip
+        f.writestr("se7en Clip/_internal/lib.dll", "new")
     upd.Updater()._swap_portable(z, relaunch=False)
     text = Path(started[0][2]).read_text("utf-8", errors="replace")
     assert "/XD" in text and "data" in text and "portable.flag" in text and "/MIR" in text
@@ -161,10 +161,10 @@ def test_what_changed_is_shown_once_after_an_update(monkeypatch, tmp_path):
     u.note_launch()
     assert "updated_from" not in u.snapshot() and (tmp_path / "version.txt").read_text() == __version__
     # launch after an update from an older version
-    (tmp_path / "version.txt").write_text("1.0.0")
+    (tmp_path / "version.txt").write_text("0.0.1")  # une version plus ancienne que celle de se7en Clip
     u = upd.Updater()
     u.note_launch()
-    assert u.snapshot()["updated_from"] == "1.0.0"
+    assert u.snapshot()["updated_from"] == "0.0.1"
     assert "updated_from" not in u.seen()
     # the next launch of the same version shows nothing
     u = upd.Updater()
