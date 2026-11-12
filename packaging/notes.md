@@ -1,7 +1,11 @@
-## se7en Clip 0.5.2
+## se7en Clip 0.5.3
 
-- **Composants à jour, clairement** : chaque composant (FFmpeg, Deno, yt-dlp, Whisper, llama.cpp, Real-ESRGAN…) affiche « À jour (version X, vérifié le …) » ou « Mise à jour disponible ». Un composant à jour n'est plus jamais retéléchargé, et l'appli te prévient quand une nouvelle version sort.
-- **Corrigé** : une mise à jour de FFmpeg ou de Deno était téléchargée mais pas utilisée (le bouton retéléchargeait en boucle) ; un ancien yt-dlp pouvait masquer le plus récent.
+- **Corrigé** : un lien mal formé ne rend plus l'appli toute blanche, il est simplement refusé.
+- **En direct** : les étapes et les clips s'affichent pendant l'analyse.
+- **« Arrêter » immédiat**, même pendant la transcription.
+- **Transcription gardée par vidéo** : la même vidéo n'est plus retranscrite dans un autre projet, et le temps restant est plus juste.
+- **Suppression de projet** : la vidéo téléchargée depuis un lien est supprimée aussi (jamais une vidéo de ton PC).
+- **Ménage** : les anciens installateurs de mise à jour sont nettoyés, et les outils (FFmpeg, Whisper…) s'arrêtent avec l'appli.
 
 Tes projets et tes réglages sont gardés.
 
