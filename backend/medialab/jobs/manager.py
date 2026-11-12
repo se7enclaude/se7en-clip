@@ -351,6 +351,8 @@ class JobManager:
         log.info("Job %s completed: %s", job_id, result.get("output_path") or result.get("file_path"),
                  extra={"job_id": job_id})
         self._emit(job_id)
+        if (job.get("options") or {}).get("quiet"):  # ex. « Refaire les rendus » : pas N sons et N notifications
+            return
         bus.publish("notify", {"kind": "success", "job_id": job_id, "job_kind": job["kind"],
                                "title": result.get("title") or job.get("title"),
                                "file_path": result.get("output_path") or result.get("file_path")})

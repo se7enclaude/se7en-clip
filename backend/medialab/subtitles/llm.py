@@ -182,6 +182,9 @@ class LocalLLM:
                 creationflags=components.CREATE_NO_WINDOW)
             t0 = time.monotonic()
             while time.monotonic() - t0 < 240 and self.proc.poll() is None:
+                if self.cancel is not None and self.cancel.is_set():  # « Arrêter » pendant le chargement du modèle
+                    self.stop()
+                    raise Canceled()
                 try:
                     if httpx.get(f"http://127.0.0.1:{self.port}/health", timeout=2).status_code == 200:
                         log.info("Local language model ready (%s) in %.1fs", "GPU" if layers else "CPU",
@@ -189,7 +192,11 @@ class LocalLLM:
                         return
                 except httpx.HTTPError:
                     pass
-                time.sleep(0.5)
+                if self.cancel is not None:
+                    if self.cancel.wait(0.5):
+                        continue  # vu au tour suivant
+                else:
+                    time.sleep(0.5)
             self.stop()
             log.warning("llama-server did not start with %d GPU layers", layers)
         raise MediaLabError("llm_start_failed", "The local language model could not start.",

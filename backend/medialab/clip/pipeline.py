@@ -5,7 +5,9 @@ projet : relancer après une erreur ou demander plus de clips ne refait pas tout
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import re
 import threading
 import time
@@ -34,9 +36,9 @@ def auto_count(duration: float) -> int:
     return max(3, min(30, round(duration / 240)))
 
 
-# part de la barre de progression de chaque étape
-STEPS = [("download", 0.00, 0.15), ("audio", 0.15, 0.18), ("transcribe", 0.18, 0.55), ("moments", 0.55, 0.57),
-         ("judge", 0.57, 0.75), ("layout", 0.75, 0.78), ("render", 0.78, 1.00)]
+# part de la barre de progression de chaque étape (la transcription prend l'essentiel du temps : l'ETA en dépend)
+STEPS = [("download", 0.00, 0.15), ("audio", 0.15, 0.18), ("transcribe", 0.18, 0.85), ("moments", 0.85, 0.86),
+         ("judge", 0.86, 0.93), ("layout", 0.93, 0.95), ("render", 0.95, 1.00)]
 
 
 class Stepper:
@@ -120,6 +122,57 @@ def _download(project: dict, settings, jctx, st: Stepper) -> Path:
     return Path(res.file_path)
 
 
+# ------------------------------------------------------------------ transcription gardée par vidéo
+TRANSCRIPTS_KEEP = 40  # transcriptions gardées (les plus récentes)
+
+
+def source_key(src: Path, lang: str | None) -> str:
+    """Empreinte de la vidéo (nom + taille + date de modification) et de la langue demandée : une même vidéo
+    n'est transcrite qu'une fois, même dans un autre projet."""
+    st = src.stat()
+    raw = f"{src.name.lower()}|{st.st_size}|{st.st_mtime_ns}|{lang or 'auto'}"
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:20]
+
+
+def _transcripts() -> Path:
+    d = P.root() / "transcripts"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def load_transcript(key: str) -> dict | None:
+    f = _transcripts() / f"{key}.json"
+    try:
+        data = json.loads(f.read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("words"), list) or not data.get("lang"):
+        return None
+    try:
+        os.utime(f)  # récemment utilisée : gardée au nettoyage
+    except OSError:
+        pass
+    return data
+
+
+def write_json(f: Path, data) -> None:
+    """Écriture atomique (fichier temporaire puis remplacement)."""
+    tmp = f.with_name(f.name + ".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False), "utf-8")
+    os.replace(tmp, f)
+
+
+def save_transcript(key: str, data: dict) -> None:
+    try:
+        d = _transcripts()
+        write_json(d / f"{key}.json", data)
+        old = sorted(d.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)[TRANSCRIPTS_KEEP:]
+        for f in old:
+            f.unlink(missing_ok=True)
+    except OSError as e:  # le cache n'est qu'un raccourci
+        log.warning("Transcript cache not written: %s", e)
+
+
 # ------------------------------------------------------------------ analyse
 def analyze(pid: str, settings, jctx, progress: Progress, render_clips: bool = True) -> dict:
     cancel: threading.Event = jctx.cancel
@@ -153,8 +206,20 @@ def analyze(pid: str, settings, jctx, progress: Progress, render_clips: bool = T
     if not wav.exists():
         T.extract_audio(src, wav, video.get("duration"), cancel, lambda f: st.report(f, "Extraction du son"))
     words_file = cache / "words.json"
+    wanted = opts.get("language") if opts.get("language") not in (None, "", "auto") else None
+    key = source_key(src, wanted)
+    data = None
     if words_file.exists():
-        data = json.loads(words_file.read_text("utf-8"))
+        try:
+            data = json.loads(words_file.read_text("utf-8"))
+        except (OSError, ValueError):
+            data = None
+    if data is None:
+        data = load_transcript(key)  # même vidéo déjà transcrite (autre projet, ou projet relancé)
+        if data is not None:
+            log.info("Transcript reused for %s", src.name)
+            write_json(words_file, data)
+    if data is not None:
         words, lang = data["words"], data["lang"]
     else:
         st.step("transcribe", "Détection de la voix")
@@ -162,7 +227,7 @@ def analyze(pid: str, settings, jctx, progress: Progress, render_clips: bool = T
         if not speech:
             raise MediaLabError("no_speech", "Aucune voix trouvée dans cette vidéo.",
                                 "se7en Clip choisit les moments d'après ce qui est dit.")
-        lang = opts.get("language") if opts.get("language") not in (None, "", "auto") else None
+        lang = wanted
         if not lang:
             st.report(0.02, "Détection de la langue")
             lang = T.detect_language(T.read_wav(wav), speech, cli, model, cancel)["code"]
@@ -177,7 +242,8 @@ def analyze(pid: str, settings, jctx, progress: Progress, render_clips: bool = T
         ws = [w for s in segments for w in s["words"]]
         T.snap_to_speech(ws, speech)
         words = [w.to_dict() for w in ws]
-        words_file.write_text(json.dumps({"lang": lang, "words": words}, ensure_ascii=False), "utf-8")
+        write_json(words_file, {"lang": lang, "words": words})
+        save_transcript(key, {"lang": lang, "words": words})
     if not words:
         raise MediaLabError("no_speech", "Rien n'a pu être compris dans cette vidéo.", "Vérifiez le son.")
     P.patch(pid, {"language": lang})
@@ -261,6 +327,9 @@ def forced_layout(mode: str, detected: reframe.Layout) -> reframe.Layout:
     return reframe.Layout(mode, cam, 1.0, detected.content)
 
 
+RENDER_KEYS = ("start", "end", "layout", "captions")  # ce dont dépend le fichier rendu
+
+
 def render_one(pid: str, cid: str, settings, cancel: threading.Event, progress: Callable[[float, str], None],
                words: list[dict] | None = None) -> dict:
     project = P.load(pid)
@@ -286,10 +355,13 @@ def render_one(pid: str, cid: str, settings, cancel: threading.Event, progress: 
     res = render.render(src, project["video"], clip, words, dst, cancel, progress,
                         use_gpu=bool(getattr(settings.tools, "use_gpu_encoder", True)), messages=messages)
     dst.with_suffix(".txt").unlink(missing_ok=True)  # ancien fichier texte (avant 0.4.2)
+    used = {k: clip.get(k) for k in RENDER_KEYS}
     project = P.load(pid)
     for c in project["clips"]:
         if c["id"] == cid:
-            c.update({**res, "stale": False})
+            # modifié pendant le rendu (début, fin, cadrage, sous-titres) : le fichier rendu n'est déjà plus à jour
+            changed = any(c.get(k) != v for k, v in used.items())
+            c.update({**res, "stale": changed})
             clip = c
     P.save(project)
     return clip

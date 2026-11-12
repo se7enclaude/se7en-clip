@@ -96,6 +96,17 @@ def _run(cmd: list[str], cancel: threading.Event | None, cwd: str | None = None,
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, cwd=cwd,
                             creationflags=components.CREATE_NO_WINDOW, text=True, encoding="utf-8", errors="replace")
     out: list[str] = []
+    done = threading.Event()
+
+    def watch() -> None:  # whisper n'écrit qu'une ligne toutes les ~15 s : « Arrêter » tue le processus tout de suite
+        while not done.is_set():
+            if cancel.wait(0.25):
+                if proc.poll() is None:
+                    proc.kill()
+                return
+
+    if cancel is not None:
+        threading.Thread(target=watch, name=f"{label}-cancel", daemon=True).start()
     try:
         assert proc.stdout
         for line in proc.stdout:
@@ -106,7 +117,10 @@ def _run(cmd: list[str], cancel: threading.Event | None, cwd: str | None = None,
                 proc.kill()
                 raise Canceled()
         proc.wait()
+        if cancel is not None and cancel.is_set():
+            raise Canceled()
     finally:
+        done.set()
         if proc.poll() is None:
             proc.kill()
             proc.wait()

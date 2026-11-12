@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -17,6 +18,7 @@ from pathlib import Path
 
 import httpx
 
+from ..errors import Canceled
 from ..logging_setup import get_logger
 
 log = get_logger("clip")
@@ -82,6 +84,8 @@ def fetch_twitch(vid: str, duration: float, cancel: threading.Event) -> list[dic
     bounds = [(k * step, min(duration + 60, (k + 1) * step)) for k in range(int(duration // step) + 1)]
     with ThreadPoolExecutor(max_workers=8) as pool:
         parts = list(pool.map(lambda b: _twitch_segment(vid, b[0], b[1], cancel), bounds))
+    if cancel.is_set():  # chat incomplet : surtout pas gardé en cache
+        raise Canceled()
     return [m for part in parts for m in part]
 
 
@@ -131,7 +135,10 @@ def fetch(url: str | None, duration: float, cache: Path, cancel: threading.Event
     """Messages du chat triés par temps ({t, user, color, text}), gardés dans le cache du projet."""
     f = cache / "chat.json"
     if f.exists():
-        return json.loads(f.read_text("utf-8"))
+        try:
+            return json.loads(f.read_text("utf-8"))
+        except (OSError, ValueError):  # fichier abîmé : on le refait
+            pass
     msgs: list[dict] = []
     if url:
         try:
@@ -140,10 +147,15 @@ def fetch(url: str | None, duration: float, cache: Path, cancel: threading.Event
                 msgs = fetch_twitch(vid, duration, cancel)
             elif re.search(r"youtube\.com|youtu\.be", url, re.I):
                 msgs = fetch_youtube(url, cache)
-        except Exception as e:  # le chat est un bonus : jamais bloquant
+        except Canceled:
+            raise
+        except Exception as e:  # le chat est un bonus : jamais bloquant, mais pas gardé (réessayé la prochaine fois)
             log.info("Chat replay unavailable for %s: %s", url, e)
+            return []
     msgs.sort(key=lambda m: m["t"])
-    f.write_text(json.dumps(msgs, ensure_ascii=False), "utf-8")
+    tmp = f.with_name("chat.json.tmp")
+    tmp.write_text(json.dumps(msgs, ensure_ascii=False), "utf-8")
+    os.replace(tmp, f)
     log.info("Chat replay: %d messages", len(msgs))
     return msgs
 

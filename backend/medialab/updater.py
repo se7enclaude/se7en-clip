@@ -100,6 +100,22 @@ def _launch(script: Path, cwd: str) -> None:
         subprocess.Popen(args, creationflags=HIDDEN, close_fds=True, cwd=cwd, **io)
 
 
+
+def _clean_downloads() -> int:
+    """Installateurs déjà utilisés (ou téléchargements interrompus) : supprimés après un changement de version."""
+    folder = paths().data / "updates"
+    n = 0
+    for pattern in ("*.exe", "*.zip", "*.part"):
+        for f in folder.glob(pattern):
+            try:
+                f.unlink()
+                n += 1
+            except OSError as e:  # encore ouvert (installateur pas tout à fait fermé) : la prochaine fois
+                log.info("Old update file kept: %s (%s)", f.name, e)
+    if n:
+        log.info("Removed %d old update file(s)", n)
+    return n
+
 class Updater:
     def __init__(self) -> None:
         self.state: dict[str, Any] = {"state": "idle", "current": __version__, "configured": bool(feed_url()),
@@ -309,6 +325,8 @@ class Updater:
         except OSError as e:
             log.info("Version marker not updated: %s", e)
             return
+        if prev and prev != __version__:
+            _clean_downloads()
         if prev and prev != __version__ and (prev == "older" or is_newer(__version__, prev)):
             from .changelog import since
             log.info("se7en updated: %s -> %s", prev, __version__)

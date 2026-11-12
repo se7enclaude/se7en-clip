@@ -128,8 +128,35 @@ def exists(pid: str) -> bool:
 
 
 def delete(pid: str) -> None:
+    try:
+        project = load(pid)
+    except (MediaLabError, OSError, ValueError):
+        project = {}
     _file(pid).unlink(missing_ok=True)
     shutil.rmtree(root() / "cache" / pid, ignore_errors=True)
+    # une vidéo téléchargée depuis un lien appartient au projet : elle part avec lui (jamais un fichier choisi
+    # par l'utilisateur, ni une vidéo encore utilisée par un autre projet)
+    src = (project.get("source") or {}).get("path")
+    if src and (project.get("source") or {}).get("url"):
+        try:
+            if Path(src).resolve().is_relative_to((root() / "sources").resolve()) and not _used_elsewhere(src):
+                Path(src).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _used_elsewhere(src: str) -> bool:
+    target = os.path.normcase(str(Path(src).resolve()))
+    for f in root().glob("*.json"):
+        try:
+            with _lock:
+                p = json.loads(f.read_text("utf-8"))
+            other = (p.get("source") or {}).get("path")
+            if other and os.path.normcase(str(Path(other).resolve())) == target:
+                return True
+        except (OSError, ValueError, AttributeError):
+            continue
+    return False
 
 
 def listing() -> list[dict]:

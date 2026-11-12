@@ -176,7 +176,8 @@ def register(app: FastAPI, S) -> None:
         clip = next((c for c in project["clips"] if c["id"] == cid), None)
         if clip is None:
             raise MediaLabError("clip_not_found", "Ce clip n'existe pas.")
-        job = S.jobs.add("clip", project["source"].get("path") or "", {"op": "render", "project": pid, "clip": cid},
+        job = S.jobs.add("clip", project["source"].get("path") or "",
+                         {"op": "render", "quiet": True, "project": pid, "clip": cid},
                          title=clip.get("title") or project["name"], platform="clip")
         return {"job": job}
 
@@ -268,7 +269,8 @@ def register(app: FastAPI, S) -> None:
     @app.post("/api/clip/projects/{pid}/render-all")
     async def clip_render_all(pid: str):
         project = P.load(pid)
-        jobs = [S.jobs.add("clip", project["source"].get("path") or "", {"op": "render", "project": pid, "clip": c["id"]},
+        jobs = [S.jobs.add("clip", project["source"].get("path") or "",
+                           {"op": "render", "quiet": True, "project": pid, "clip": c["id"]},
                            title=c.get("title") or project["name"], platform="clip")
                 for c in project["clips"] if c.get("stale") or not c.get("file")]
         return {"jobs": len(jobs)}
