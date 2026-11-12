@@ -9,6 +9,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 from ..config import paths
 from ..errors import MediaLabError
@@ -51,6 +52,8 @@ def _file(pid: str) -> Path:
 
 def create(source: str, options: dict | None = None, output: str | None = None) -> dict:
     is_url = bool(re.match(r"https?://", source.strip(), re.I))
+    if is_url and not urlparse(source.strip()).hostname:
+        raise MediaLabError("bad_url", "Ce lien n'est pas valide.", "Copie l'adresse complète de la vidéo (https://…).")
     if not is_url and not Path(source).is_file():
         raise MediaLabError("file_missing", "Fichier introuvable.", "Il a peut-être été déplacé ou supprimé.")
     now = time.time()
@@ -115,6 +118,13 @@ def update_clip(pid: str, cid: str, changes: dict) -> tuple[dict, dict]:
 
 def video_duration(project: dict) -> float:
     return float((project.get("video") or {}).get("duration") or 0)
+
+
+def exists(pid: str) -> bool:
+    try:
+        return _file(pid).exists()
+    except MediaLabError:
+        return False
 
 
 def delete(pid: str) -> None:

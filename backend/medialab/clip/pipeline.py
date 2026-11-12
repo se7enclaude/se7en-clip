@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Callable
 
 from ..errors import Canceled, MediaLabError
+from ..events import bus
 from ..logging_setup import get_logger
 from ..subtitles import project as subs_project
 from ..subtitles import transcribe as T
@@ -46,6 +47,7 @@ class Stepper:
     def step(self, name: str, label: str) -> None:
         self.name, self.lo, self.hi = next((s for s in STEPS if s[0] == name))
         P.patch(self.pid, {"step": name, "status": "analyzing"})
+        bus.publish("clip_project", {"project": self.pid})  # l'étape en cours s'affiche tout de suite
         self.report(0.0, label)
 
     def report(self, frac: float, label: str) -> None:
@@ -245,6 +247,7 @@ def analyze(pid: str, settings, jctx, progress: Progress, render_clips: bool = T
             render_one(pid, clip["id"], settings, cancel,
                        lambda f, lbl, k=k: st.report((k + f) / len(clips), f"Clip {k + 1}/{len(clips)} · {lbl}"),
                        words=words)
+            bus.publish("clip_project", {"project": pid})  # chaque clip rendu apparaît sans attendre la fin
     project = P.patch(pid, {"status": "ready", "step": None})
     progress(1.0, "Terminé", 0)
     return project

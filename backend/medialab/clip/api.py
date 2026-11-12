@@ -77,16 +77,25 @@ def make_worker(settings):
                     "format": f"{n} clips", "duration": (project.get("video") or {}).get("duration"),
                     "meta": {"project": pid, "clips": n}}
         except Canceled:
-            P.patch(pid, {"status": "paused", "step": None})
-            bus.publish("clip_project", {"project": pid})
+            # un rendu de clip annulé ne met pas tout le projet en « Analyse arrêtée »
+            if P.exists(pid) and opts.get("op") != "render":
+                P.patch(pid, {"status": "paused", "step": None})
+                bus.publish("clip_project", {"project": pid})
             raise
         except MediaLabError as e:
-            P.patch(pid, {"status": "error", "error": {"code": e.code, "message": e.message, "hint": e.hint},
-                          "step": None})
-            bus.publish("clip_project", {"project": pid})
+            if not P.exists(pid):  # projet supprimé pendant la tâche : simple arrêt, pas une erreur
+                raise Canceled() from None
+            if opts.get("op") != "render":  # un rendu raté reste une erreur de ce clip, pas du projet
+                P.patch(pid, {"status": "error", "error": {"code": e.code, "message": e.message, "hint": e.hint},
+                              "step": None})
+                bus.publish("clip_project", {"project": pid})
             raise
         except Exception as e:
+            if not P.exists(pid):
+                raise Canceled() from None
             log.exception("Clip job failed")
+            if opts.get("op") == "render":
+                raise
             P.patch(pid, {"status": "error", "error": {"message": str(e), "hint": "Voir le journal."}, "step": None})
             bus.publish("clip_project", {"project": pid})
             raise
@@ -125,12 +134,15 @@ def register(app: FastAPI, S) -> None:
 
     @app.delete("/api/clip/projects/{pid}")
     async def clip_delete(pid: str):
-        project = P.load(pid)
-        if project.get("job"):
-            try:
-                S.jobs.cancel(project["job"])
-            except MediaLabError:
-                pass
+        P.load(pid)
+        # toutes les tâches du projet (analyse et rendus en file), pas seulement la dernière
+        for j in S.jobs.list():
+            if j.get("kind") == "clip" and (j.get("options") or {}).get("project") == pid \
+                    and j.get("status") not in ("completed", "canceled", "failed"):
+                try:
+                    S.jobs.cancel(j["id"])
+                except MediaLabError:
+                    pass
         P.delete(pid)
         return {"ok": True}
 

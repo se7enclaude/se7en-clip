@@ -10,6 +10,15 @@ import { duration as fmtDuration } from "../lib/format";
 import { useApp } from "../store/app";
 import "../styles/clip.css";
 
+/** Site d'un lien, sans planter sur un lien mal formé (sinon la page entière devient blanche à chaque lancement). */
+const hostOf = (u: string) => {
+  try {
+    return new URL(u).hostname.replace(/^www\./, "") || "lien";
+  } catch {
+    return "lien";
+  }
+};
+
 type Layout = "auto" | "stream" | "chat" | "face" | "fit";
 type Captions = "tiktok" | "hormozi" | "neon" | "clean" | "none";
 
@@ -179,7 +188,7 @@ export function ClipsPage() {
                 <div className="clip-project-body">
                   <div className="ellipsis" style={{ fontWeight: 600 }} title={p.name}>{p.name}</div>
                   <div className="mono faint" style={{ fontSize: 11 }}>
-                    {[p.duration ? fmtDuration(p.duration) : null, p.url ? new URL(p.url).hostname.replace(/^www\./, "") : "fichier", p.clips ? `${p.clips} clips` : null].filter(Boolean).join(" · ")}
+                    {[p.duration ? fmtDuration(p.duration) : null, p.url ? hostOf(p.url) : "fichier", p.clips ? `${p.clips} clips` : null].filter(Boolean).join(" · ")}
                   </div>
                   {busy(p) ? (
                     <div style={{ marginTop: 8 }}>
